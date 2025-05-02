@@ -163,6 +163,9 @@
       border: 1px solid #ccc;
       margin-top: 5px;
       background-size: cover;
+      background-position: center;
+      opacity: var(--preview-opacity, 1);
+      filter: blur(var(--preview-blur, 0px));
     }
     
     .slider-container {
@@ -379,17 +382,21 @@
       
       if (savedImage !== 'none') {
         document.getElementById('bgPreview').style.backgroundImage = savedImage;
+        document.getElementById('bgPreview').style.setProperty('--preview-opacity', savedOpacity);
+        document.getElementById('bgPreview').style.setProperty('--preview-blur', savedBlur + 'px');
       }
 
       // Event listeners for sliders
       document.getElementById('bgOpacity').addEventListener('input', function() {
         const value = this.value;
         document.getElementById('opacityValue').textContent = Math.round(value * 100) + '%';
+        document.getElementById('bgPreview').style.setProperty('--preview-opacity', value);
       });
 
       document.getElementById('bgBlur').addEventListener('input', function() {
         const value = this.value;
         document.getElementById('blurValue').textContent = value + 'px';
+        document.getElementById('bgPreview').style.setProperty('--preview-blur', value + 'px');
       });
 
       // Image upload preview
@@ -435,6 +442,12 @@
       
       // Close modal when clicking overlay
       document.getElementById('modalOverlay').addEventListener('click', closeModals);
+
+      // Save button
+      document.getElementById('saveBtn').addEventListener('click', saveSettings);
+      
+      // Reset background button
+      document.getElementById('resetBgBtn').addEventListener('click', resetBackground);
 
       // Initialize rental data
       let rentals = JSON.parse(localStorage.getItem('rentals')) || [];
@@ -512,6 +525,7 @@
         reader.onload = function(e) {
           const bgImage = `url(${e.target.result})`;
           document.body.style.setProperty('--bg-image', bgImage);
+          document.getElementById('bgPreview').style.backgroundImage = bgImage;
           localStorage.setItem('bgImage', bgImage);
         };
         reader.readAsDataURL(bgImageUpload.files[0]);
@@ -520,8 +534,12 @@
       // Save opacity and blur
       const opacity = document.getElementById('bgOpacity').value;
       const blur = document.getElementById('bgBlur').value;
+      
       document.body.style.setProperty('--bg-opacity', opacity);
       document.body.style.setProperty('--bg-blur', blur + 'px');
+      document.getElementById('bgPreview').style.setProperty('--preview-opacity', opacity);
+      document.getElementById('bgPreview').style.setProperty('--preview-blur', blur + 'px');
+      
       localStorage.setItem('bgOpacity', opacity);
       localStorage.setItem('bgBlur', blur);
       
@@ -529,18 +547,34 @@
     }
 
     function resetBackground() {
+      // Reset to default values
+      const defaultColor = '#f0f8ff';
+      const defaultOpacity = '0.8';
+      const defaultBlur = '0';
+      
+      // Update DOM
+      document.body.style.setProperty('--bg-color', defaultColor);
+      document.body.style.setProperty('--bg-image', 'none');
+      document.body.style.setProperty('--bg-opacity', defaultOpacity);
+      document.body.style.setProperty('--bg-blur', defaultBlur + 'px');
+      
+      document.getElementById('bgPreview').style.backgroundImage = 'none';
+      document.getElementById('bgPreview').style.setProperty('--preview-opacity', defaultOpacity);
+      document.getElementById('bgPreview').style.setProperty('--preview-blur', defaultBlur + 'px');
+      
+      // Update form controls
+      document.getElementById('bgColor').value = defaultColor;
+      document.getElementById('bgOpacity').value = defaultOpacity;
+      document.getElementById('bgBlur').value = defaultBlur;
+      document.getElementById('opacityValue').textContent = Math.round(defaultOpacity * 100) + '%';
+      document.getElementById('blurValue').textContent = defaultBlur + 'px';
+      document.getElementById('bgImageUpload').value = '';
+      
+      // Clear saved settings
       localStorage.removeItem('bgImage');
       localStorage.removeItem('bgOpacity');
       localStorage.removeItem('bgBlur');
-      document.body.style.setProperty('--bg-image', 'none');
-      document.body.style.setProperty('--bg-opacity', '1');
-      document.body.style.setProperty('--bg-blur', '0px');
-      document.getElementById('bgPreview').style.backgroundImage = 'none';
-      document.getElementById('bgOpacity').value = '0.8';
-      document.getElementById('bgBlur').value = '0';
-      document.getElementById('opacityValue').textContent = '80%';
-      document.getElementById('blurValue').textContent = '0px';
-      document.getElementById('bgImageUpload').value = '';
+      localStorage.setItem('bgColor', defaultColor);
     }
   </script>
 </body>
