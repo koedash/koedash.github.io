@@ -14,6 +14,7 @@
       font-family: Arial; 
       margin: 20px; 
       position: relative;
+      padding-bottom: 50px; /* Space for settings gear */
     }
     body::before {
       content: "";
@@ -40,17 +41,61 @@
       margin-bottom: 20px;
     }
     
-    .main-menu button {
-      background: var(--button-bg);
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      padding: 10px 20px;
-      margin: 0 10px;
+    /* Settings Gear Icon */
+    #settingsGear {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background: black;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
-      font-size: 1em;
+      z-index: 100;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
     }
     
-    /* Modal Windows */
+    #settingsGear::before {
+      content: "⚙";
+      color: white;
+      font-size: 24px;
+    }
+    
+    /* Tab Interface */
+    .tabs {
+      display: flex;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+    
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-bottom: none;
+      border-radius: 5px 5px 0 0;
+      margin-right: 5px;
+    }
+    
+    .tab.active {
+      background: white;
+      border-bottom: 1px solid white;
+      margin-bottom: -1px;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Rental Interface */
     .modal-window {
       display: none; 
       position: fixed; 
@@ -63,12 +108,11 @@
       z-index: 1000;
       border-radius: 10px;
       width: 80%;
-      max-width: 500px;
+      max-width: 800px; /* Wider for tabs */
       max-height: 80vh;
       overflow-y: auto;
     }
     
-    /* Rental Interface */
     #rentalInterface h2 {
       margin-top: 0;
       text-align: center;
@@ -103,7 +147,7 @@
     }
     
     #rentalList {
-      max-height: 200px;
+      max-height: 300px;
       overflow-y: auto;
       margin: 15px 0;
       border: 1px solid #eee;
@@ -188,12 +232,74 @@
   </style>
 </head>
 <body>
+  <!-- Login Container -->
+<div id="login-container" style="text-align: center; margin: 20px;">
+  <div id="g_id_onload"
+       data-client_id="PASTE_YOUR_CLIENT_ID_HERE"
+       data-callback="handleGoogleLogin">
+  </div>
+  <div class="g_id_signin"
+       data-type="standard"
+       data-size="large"
+       data-theme="outline"
+       data-text="sign_in_with"
+       data-shape="rectangular">
+  </div>
+</div>
+
+<!-- Hide your existing app content inside this div -->
+<div id="app-content" style="display: none;">
+  [YOUR EXISTING HTML CONTENT GOES HERE]
+</div>
+<button onclick="logout()" style="padding: 5px 10px;">Logout</button>
+
+<script>
+function logout() {
+  sessionStorage.clear();
+  localStorage.removeItem(sessionStorage.getItem('userEmail') + '_rentals');
+  location.reload();
+}
+</script>
+<!-- Load Google's script -->
+<script src="https://accounts.google.com/gsi/client" async defer>// Handle Google Login
+function handleGoogleLogin(response) {
+  const userData = JSON.parse(atob(response.credential.split('.')[1]));
+
+  // Store user email safely (don't store the full token)
+  sessionStorage.setItem('userEmail', userData.email);
+  
+  // Show app content
+  document.getElementById('login-container').style.display = 'none';
+  document.getElementById('app-content').style.display = 'block';
+  
+  // Initialize user-specific data
+  initUserData(userData.email);
+}
+
+// Initialize user data storage
+function initUserData(email) {
+  if (!localStorage.getItem(email + '_rentals')) {
+    localStorage.setItem(email + '_rentals', '[]');
+  }
+}
+
+// On page load - check if already logged in
+document.addEventListener('DOMContentLoaded', function() {
+  if (sessionStorage.getItem('userEmail')) {
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('app-content').style.display = 'block';
+    initUserData(sessionStorage.getItem('userEmail'));
+  }
+});
+</script>
   <!-- Main Menu (always visible) -->
   <div class="main-menu">
     <h1>Library Helper</h1>
     <button id="rentalBtn">Manage Rentals</button>
-    <button id="settingsBtn">Settings</button>
   </div>
+
+  <!-- Settings Gear Icon -->
+  <div id="settingsGear"></div>
 
   <!-- Modal Overlay -->
   <div class="modal-overlay" id="modalOverlay"></div>
@@ -202,27 +308,38 @@
   <div class="modal-window" id="rentalInterface">
     <h2>Rental Tracker</h2>
     
-    <div class="filter-options">
-      <span id="todayBtn">Today (<span id="todayCount">0</span>)</span> | 
-      <span id="weekBtn">This Week (<span id="weekCount">0</span>)</span> | 
-      <span id="monthBtn">This Month (<span id="monthCount">0</span>)</span>
+    <div class="tabs">
+      <div class="tab active" data-tab="rent">Rent Books</div>
+      <div class="tab" data-tab="list">Rented Books List</div>
     </div>
     
-    <div id="rentalList"><p>No rentals yet</p></div>
-    
-    <div class="input-box">
-      <div class="input-label">Book ID:</div>
-      <input type="text" id="bookId" placeholder="Scan or type">
+    <!-- Rent Books Tab -->
+    <div class="tab-content active" id="rentTab">
+      <div class="input-box">
+        <div class="input-label">Book ID:</div>
+        <input type="text" id="bookId" placeholder="Scan or type">
+      </div>
+      
+      <div class="input-box">
+        <div class="input-label">Student ID:</div>
+        <input type="text" id="studentId" placeholder="Scan or type">
+      </div>
+      
+      <div class="action-buttons">
+        <button id="processBtn">Process Rental</button>
+        <button id="closeRentalBtn">Close</button>
+      </div>
     </div>
     
-    <div class="input-box">
-      <div class="input-label">Student ID:</div>
-      <input type="text" id="studentId" placeholder="Scan or type">
-    </div>
-    
-    <div class="action-buttons">
-      <button id="processBtn">Process Rental</button>
-      <button id="closeRentalBtn">Close</button>
+    <!-- Rented Books List Tab -->
+    <div class="tab-content" id="listTab">
+      <div class="filter-options">
+        <span id="todayBtn">Today (<span id="todayCount">0</span>)</span> | 
+        <span id="weekBtn">This Week (<span id="weekCount">0</span>)</span> | 
+        <span id="monthBtn">This Month (<span id="monthCount">0</span>)</span>
+      </div>
+      
+      <div id="rentalList"><p>No rentals yet</p></div>
     </div>
   </div>
 
@@ -295,6 +412,23 @@
       });
     };
 
+    // Tab Switching
+    function setupTabs() {
+      const tabs = document.querySelectorAll('.tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          // Remove active class from all tabs and content
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          
+          // Add active class to clicked tab and corresponding content
+          tab.classList.add('active');
+          const tabId = tab.getAttribute('data-tab');
+          document.getElementById(tabId + 'Tab').classList.add('active');
+        });
+      });
+    }
+
     // Modal Window Control
     function openModal(modalId) {
       // Close any open modal first
@@ -357,6 +491,9 @@
 
     // Core Application
     document.addEventListener('DOMContentLoaded', function() {
+      // Initialize tabs
+      setupTabs();
+      
       // Initialize scanners
       setupScanner('bookId');
       setupScanner('studentId');
@@ -416,7 +553,8 @@
         openModal('rentalInterface');
       });
 
-      document.getElementById('settingsBtn').addEventListener('click', function() {
+      // Settings gear icon
+      document.getElementById('settingsGear').addEventListener('click', function() {
         openModal('settingsPanel');
       });
 
@@ -485,31 +623,12 @@
     }
 
     function processRental() {
-      const bookId = document.getElementById('bookId').value.trim();
-      const studentId = document.getElementById('studentId').value.trim();
+      const userEmail = sessionStorage.getItem('userEmail');
+      if (!userEmail) return alert("Please login first!");
       
-      if (bookId && studentId) {
-        let rentals = JSON.parse(localStorage.getItem('rentals')) || [];
-        
-        // Remove existing entries with these IDs
-        rentals = rentals.filter(r => !(r.bookId === bookId || r.studentId === studentId));
-        
-        // Add new rental
-        rentals.push({
-          bookId,
-          studentId,
-          date: new Date().toISOString()
-        });
-        
-        // Save and update
-        localStorage.setItem('rentals', JSON.stringify(rentals));
-        updateRentalList(document.getElementById('rentalInterface').dataset.currentFilter || 'day');
-        updateFilterCounts();
-        document.getElementById('bookId').value = '';
-        document.getElementById('studentId').value = '';
-      } else {
-        alert('Please enter both IDs!');
-      }
+      let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
+      // ... rest of your existing code ...
+      localStorage.setItem(userEmail + '_rentals', JSON.stringify(rentals));
     }
 
     function saveSettings() {
