@@ -271,6 +271,22 @@
       animation: slideIn 0.5s ease-out;
     }
     
+    /* Filter Options */
+    .filter-options span {
+      cursor: pointer;
+      padding: 5px 10px;
+      border-radius: 3px;
+    }
+    
+    .filter-options span:hover {
+      background: #f0f0f0;
+    }
+    
+    .filter-options span.active {
+      background: #4CAF50;
+      color: white;
+    }
+    
     @keyframes slideIn {
       from { transform: translateX(100%); }
       to { transform: translateX(0); }
@@ -336,7 +352,7 @@
       <!-- List Tab -->
       <div class="tab-content" id="listTab">
         <div class="filter-options">
-          <span id="todayBtn">Today (<span id="todayCount">0</span>)</span> | 
+          <span id="todayBtn" class="active">Today (<span id="todayCount">0</span>)</span> | 
           <span id="weekBtn">This Week (<span id="weekCount">0</span>)</span> | 
           <span id="monthBtn">This Month (<span id="monthCount">0</span>)</span>
         </div>
@@ -372,6 +388,12 @@
             <input type="range" id="bgBlur" min="0" max="20" value="0">
             <span id="blurValue">0px</span>
           </div>
+        </label>
+      </div>
+      <div class="settings-row">
+        <label>
+          Default Rental Period (days):
+          <input type="number" id="rentalPeriod" min="1" max="365" value="14">
         </label>
       </div>
       <div class="action-buttons">
@@ -423,6 +445,7 @@
         // Initialize user data
         initUserData(userData.email);
         updateWelcomeMessage();
+        loadSettings();
         
         // Force DOM refresh
         setTimeout(() => {
@@ -447,6 +470,11 @@
     function initUserData(email) {
       if (!localStorage.getItem(email + '_rentals')) {
         localStorage.setItem(email + '_rentals', '[]');
+      }
+      if (!localStorage.getItem('appSettings')) {
+        localStorage.setItem('appSettings', JSON.stringify({
+          rentalPeriod: 14
+        }));
       }
     }
 
@@ -476,6 +504,7 @@
         document.getElementById('app-content').style.display = 'block';
         initUserData(sessionStorage.getItem('userEmail'));
         updateWelcomeMessage();
+        loadSettings();
         checkOverdueBooks();
         setInterval(checkOverdueBooks, 60000); // Check every minute
       }
@@ -502,6 +531,9 @@
           document.querySelectorAll('.tab, .tab-content').forEach(el => el.classList.remove('active'));
           tab.classList.add('active');
           document.getElementById(tab.getAttribute('data-tab') + 'Tab').classList.add('active');
+          if (tab.getAttribute('data-tab') === 'list') {
+            updateRentalList('day');
+          }
         });
       });
 
@@ -513,9 +545,21 @@
       document.getElementById('closeSettingsBtn').addEventListener('click', closeModals);
 
       // Filter Buttons
-      document.getElementById('todayBtn').addEventListener('click', () => updateRentalList('day'));
-      document.getElementById('weekBtn').addEventListener('click', () => updateRentalList('week'));
-      document.getElementById('monthBtn').addEventListener('click', () => updateRentalList('month'));
+      document.getElementById('todayBtn').addEventListener('click', function() {
+        document.querySelectorAll('.filter-options span').forEach(s => s.classList.remove('active'));
+        this.classList.add('active');
+        updateRentalList('day');
+      });
+      document.getElementById('weekBtn').addEventListener('click', function() {
+        document.querySelectorAll('.filter-options span').forEach(s => s.classList.remove('active'));
+        this.classList.add('active');
+        updateRentalList('week');
+      });
+      document.getElementById('monthBtn').addEventListener('click', function() {
+        document.querySelectorAll('.filter-options span').forEach(s => s.classList.remove('active'));
+        this.classList.add('active');
+        updateRentalList('month');
+      });
 
       // Process Rental
       document.getElementById('processBtn').addEventListener('click', processRental);
@@ -538,9 +582,6 @@
       });
       document.getElementById('saveBtn').addEventListener('click', saveSettings);
       document.getElementById('resetBgBtn').addEventListener('click', resetBackground);
-
-      // Load saved settings
-      loadSettings();
     });
 
     function openModal(modalId) {
@@ -576,7 +617,10 @@
         
         const now = new Date();
         const dueDate = new Date();
-        dueDate.setDate(now.getDate() + 14); // 2 weeks from now
+        
+        // Get rental period from settings
+        const settings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 };
+        dueDate.setDate(now.getDate() + settings.rentalPeriod);
         
         rentals.push({
           bookId,
@@ -608,7 +652,7 @@
         switch (range) {
           case 'day': return rentalDate.toDateString() === now.toDateString();
           case 'week': return (now - rentalDate) <= 604800000;
-          case 'month': return rentalDate.getMonth() === now.getMonth();
+          case 'month': return rentalDate.getMonth() === now.getMonth() && rentalDate.getFullYear() === now.getFullYear();
           default: return true;
         }
       }).sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
@@ -683,7 +727,8 @@
       ).length;
       
       document.getElementById('monthCount').textContent = rentals.filter(r => 
-        new Date(r.rentalDate).getMonth() === now.getMonth()
+        new Date(r.rentalDate).getMonth() === now.getMonth() && 
+        new Date(r.rentalDate).getFullYear() === now.getFullYear()
       ).length;
     }
 
@@ -718,6 +763,7 @@
     }
 
     function loadSettings() {
+      // Load background settings
       const savedColor = localStorage.getItem('bgColor') || '#f0f8ff';
       const savedImage = localStorage.getItem('bgImage') || 'none';
       const savedOpacity = localStorage.getItem('bgOpacity') || '0.8';
@@ -737,9 +783,14 @@
       if (savedImage !== 'none') {
         document.getElementById('bgPreview').style.backgroundImage = savedImage;
       }
+      
+      // Load app settings
+      const appSettings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 };
+      document.getElementById('rentalPeriod').value = appSettings.rentalPeriod;
     }
 
     function saveSettings() {
+      // Save background settings
       const color = document.getElementById('bgColor').value;
       document.documentElement.style.setProperty('--bg-color', color);
       localStorage.setItem('bgColor', color);
@@ -766,6 +817,12 @@
       
       localStorage.setItem('bgOpacity', opacity);
       localStorage.setItem('bgBlur', blur);
+      
+      // Save app settings
+      const rentalPeriod = parseInt(document.getElementById('rentalPeriod').value) || 14;
+      localStorage.setItem('appSettings', JSON.stringify({
+        rentalPeriod: rentalPeriod
+      }));
       
       closeModals();
     }
