@@ -42,6 +42,13 @@
       box-shadow: 0 0 20px rgba(0,0,0,0.2);
     }
     
+    /* Google Button Fix */
+    .g_id_signin > div {
+      margin: 0 auto !important;
+      width: 250px !important;
+      height: 50px !important;
+    }
+    
     /* Main Menu */
     .main-menu {
       text-align: center;
@@ -221,7 +228,6 @@
   <!-- Login Screen -->
   <div id="login-container">
     <h2>Library Helper Login</h2>
-    <!-- Change this line in your code -->
     <div id="g_id_onload"
          data-client_id="1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com"
          data-callback="handleGoogleLogin">
@@ -327,14 +333,30 @@
     // Google Auth Functions
     // ======================
     function handleGoogleLogin(response) {
-      const userData = JSON.parse(atob(response.credential.split('.')[1]));
-      sessionStorage.setItem('userEmail', userData.email);
-      sessionStorage.setItem('userName', userData.name || 'User');
-      
-      document.getElementById('login-container').style.display = 'none';
-      document.getElementById('app-content').style.display = 'block';
-      initUserData(userData.email);
-      updateWelcomeMessage();
+      console.log("Google login response received");
+      try {
+        const userData = JSON.parse(atob(response.credential.split('.')[1]));
+        console.log("User data:", userData);
+        
+        sessionStorage.setItem('userEmail', userData.email);
+        sessionStorage.setItem('userName', userData.name || 'User');
+        
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        
+        // Force UI update
+        setTimeout(() => {
+          document.body.style.visibility = 'hidden';
+          document.body.offsetHeight; // Trigger reflow
+          document.body.style.visibility = 'visible';
+          initUserData(userData.email);
+          updateWelcomeMessage();
+        }, 100);
+        
+      } catch (error) {
+        console.error("Login error:", error);
+        alert("Login failed. Please check console for details.");
+      }
     }
 
     function initUserData(email) {
