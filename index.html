@@ -297,20 +297,7 @@
   <!-- Login Screen -->
   <div id="login-container">
     <h2>Library Helper Login</h2>
-    <div id="google-signin-container">
-      <div id="g_id_onload"
-           data-client_id="1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com"
-           data-callback="handleGoogleLogin"
-           data-auto_prompt="false">
-      </div>
-      <div class="g_id_signin"
-           data-type="standard"
-           data-size="large"
-           data-theme="outline"
-           data-text="sign_in_with"
-           data-shape="rectangular">
-      </div>
-    </div>
+    <div id="google-signin-container"></div>
     <div id="login-status"></div>
   </div>
 
@@ -467,6 +454,29 @@
       }
     }
 
+    function initGoogleAuth() {
+      if (sessionStorage.getItem('userEmail')) {
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        return;
+      }
+
+      // Initialize Google Auth
+      google.accounts.id.initialize({
+        client_id: '1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com',
+        callback: handleGoogleLogin
+      });
+      
+      // Render the button
+      google.accounts.id.renderButton(
+        document.getElementById('google-signin-container'),
+        { theme: 'outline', size: 'large' }
+      );
+      
+      // Also display the One Tap prompt
+      google.accounts.id.prompt();
+    }
+
     function initUserData(email) {
       if (!localStorage.getItem(email + '_rentals')) {
         localStorage.setItem(email + '_rentals', '[]');
@@ -498,6 +508,19 @@
     // Core Application Logic
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Google Auth
+      if (typeof google !== 'undefined') {
+        initGoogleAuth();
+      } else {
+        // Fallback if Google script hasn't loaded yet
+        const checkGoogle = setInterval(() => {
+          if (typeof google !== 'undefined') {
+            clearInterval(checkGoogle);
+            initGoogleAuth();
+          }
+        }, 100);
+      }
+
       // Check for existing session
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
@@ -619,7 +642,7 @@
         const dueDate = new Date();
         
         // Get rental period from settings
-        const settings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 };
+        const settings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 });
         dueDate.setDate(now.getDate() + settings.rentalPeriod);
         
         rentals.push({
@@ -627,7 +650,7 @@
           studentId,
           rentalDate: now.toISOString(),
           dueDate: dueDate.toISOString(),
-          returnDate: null, // Will be set when returned
+          returnDate: null,
           status: 'active'
         });
         
@@ -785,7 +808,7 @@
       }
       
       // Load app settings
-      const appSettings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 };
+      const appSettings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 });
       document.getElementById('rentalPeriod').value = appSettings.rentalPeriod;
     }
 
