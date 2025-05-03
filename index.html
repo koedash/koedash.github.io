@@ -286,11 +286,6 @@
       background: #4CAF50;
       color: white;
     }
-    
-    @keyframes slideIn {
-      from { transform: translateX(100%); }
-      to { transform: translateX(0); }
-    }
 
     /* ADMIN STYLES */
     .stat-card {
@@ -325,6 +320,11 @@
       border-radius: 10px;
       font-size: 0.8em;
     }
+    
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
   </style>
 </head>
 <body>
@@ -341,6 +341,7 @@
       <h1 id="welcome-title">Library Helper</h1>
       <button id="rentalBtn">Manage Rentals</button>
       <button onclick="logout()" style="margin-left:10px;">Logout</button>
+      <button id="adminBtn" style="margin-left:10px; display:none;">Admin Panel</button>
     </div>
 
     <div id="settingsGear"></div>
@@ -477,6 +478,10 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script>
+    // Admin system constants
+    const ADMIN_EMAIL = "koedash121211@gmail.com";
+    const OPERATORS_KEY = "library_operators";
+    
     // ======================
     // Enhanced Google Auth Functions
     // ======================
@@ -510,6 +515,11 @@
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
         
+        // Show admin button if admin
+        if (userData.email === ADMIN_EMAIL) {
+          document.getElementById('adminBtn').style.display = 'inline-block';
+        }
+        
         // Initialize user data
         initUserData(userData.email);
         updateWelcomeMessage();
@@ -539,6 +549,9 @@
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
+        if (sessionStorage.getItem('userEmail') === ADMIN_EMAIL) {
+          document.getElementById('adminBtn').style.display = 'inline-block';
+        }
         return;
       }
 
@@ -566,6 +579,9 @@
         localStorage.setItem('appSettings', JSON.stringify({
           rentalPeriod: 14
         }));
+      }
+      if (!localStorage.getItem(OPERATORS_KEY)) {
+        localStorage.setItem(OPERATORS_KEY, JSON.stringify([ADMIN_EMAIL]));
       }
     }
 
@@ -603,6 +619,9 @@
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
+        if (sessionStorage.getItem('userEmail') === ADMIN_EMAIL) {
+          document.getElementById('adminBtn').style.display = 'inline-block';
+        }
         initUserData(sessionStorage.getItem('userEmail'));
         updateWelcomeMessage();
         loadSettings();
@@ -641,6 +660,11 @@
       // Modal Controls
       document.getElementById('rentalBtn').addEventListener('click', () => openModal('rentalInterface'));
       document.getElementById('settingsGear').addEventListener('click', () => openModal('settingsPanel'));
+      document.getElementById('adminBtn').addEventListener('click', () => {
+        openModal('adminPanel');
+        renderUserList();
+        renderAllRentals();
+      });
       document.getElementById('modalOverlay').addEventListener('click', closeModals);
       document.getElementById('closeRentalBtn').addEventListener('click', closeModals);
       document.getElementById('closeSettingsBtn').addEventListener('click', closeModals);
@@ -683,6 +707,24 @@
       });
       document.getElementById('saveBtn').addEventListener('click', saveSettings);
       document.getElementById('resetBgBtn').addEventListener('click', resetBackground);
+
+      // Admin Controls
+      document.getElementById('addOperatorBtn')?.addEventListener('click', function() {
+        const email = document.getElementById('operatorEmail').value.trim();
+        if (email) {
+          addOperator(email);
+          alert(`${email} is now an operator`);
+          renderUserList();
+        }
+      });
+
+      document.querySelectorAll('#allRentalsTab .filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('#allRentalsTab .filter-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          renderAllRentals(this.dataset.filter);
+        });
+      });
     });
 
     function openModal(modalId) {
@@ -961,6 +1003,42 @@
     // ======================
     // ADMIN SYSTEM FUNCTIONS
     // ======================
+    function isOperator(email) {
+      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
+      return operators.includes(email);
+    }
+
+    function addOperator(email) {
+      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]';
+      if (!operators.includes(email)) {
+        operators.push(email);
+        localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
+      }
+    }
+
+    function removeOperator(email) {
+      let operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]';
+      operators = operators.filter(op => op !== email && op !== ADMIN_EMAIL); // Can't remove admin
+      localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
+    }
+
+    function getAllUsers() {
+      const users = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.endsWith('_rentals')) {
+          const email = key.replace('_rentals', '');
+          users.push({
+            email,
+            isAdmin: email === ADMIN_EMAIL,
+            isOperator: isOperator(email),
+            rentals: JSON.parse(localStorage.getItem(key)) || []
+          });
+        }
+      }
+      return users;
+    }
+
     function renderUserList() {
       const users = getAllUsers();
       const userList = document.getElementById('userList');
@@ -1009,3 +1087,38 @@
         <div class="${r.returnDate ? 'returned' : 'active'}">
           <div>
             <strong>Book:</strong> ${r.bookId} | 
+            <strong>Student:</strong> ${r.studentId}<br>
+            <small>Owner: ${r.owner} | Rented: ${formatDate(r.rentalDate)}</small>
+          </div>
+          <div>
+            ${!r.returnDate ? `<button onclick="adminReturnBook('${r.bookId}', '${r.owner}')" class="return-btn">Return</button>` : ''}
+            <button onclick="adminDeleteRental('${r.bookId}', '${r.owner}')" class="delete-btn">X</button>
+          </div>
+        </div>
+      `).join('');
+      
+      document.getElementById('totalActiveRentals').textContent = activeCount;
+      document.getElementById('totalOverdueRentals').textContent = overdueCount;
+    }
+
+    function adminReturnBook(bookId, ownerEmail) {
+      let rentals = JSON.parse(localStorage.getItem(`${ownerEmail}_rentals`) || '[]');
+      const rentalIndex = rentals.findIndex(r => r.bookId === bookId && !r.returnDate);
+      
+      if (rentalIndex !== -1) {
+        rentals[rentalIndex].returnDate = new Date().toISOString();
+        localStorage.setItem(`${ownerEmail}_rentals`, JSON.stringify(rentals));
+        renderAllRentals();
+      }
+    }
+
+    function adminDeleteRental(bookId, ownerEmail) {
+      if (!confirm("Delete this rental permanently?")) return;
+      let rentals = JSON.parse(localStorage.getItem(`${ownerEmail}_rentals`) || '[]');
+      rentals = rentals.filter(r => r.bookId !== bookId);
+      localStorage.setItem(`${ownerEmail}_rentals`, JSON.stringify(rentals));
+      renderAllRentals();
+    }
+  </script>
+</body>
+</html>
