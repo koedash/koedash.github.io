@@ -410,7 +410,6 @@
           throw new Error("No credential received from Google");
         }
         
-        // Manual JWT decoding to handle potential formatting issues
         const base64Url = response.credential.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const userData = JSON.parse(atob(base64));
@@ -496,11 +495,8 @@
     }
 
     function logout() {
-      const email = sessionStorage.getItem('userEmail');
+      // Only clear session data, preserve rental history in localStorage
       sessionStorage.clear();
-      if (email) {
-        localStorage.removeItem(email + '_rentals');
-      }
       location.reload();
     }
 
