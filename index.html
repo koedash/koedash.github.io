@@ -478,10 +478,63 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script>
-    // Admin system constants
+    // ======================
+    // SECURITY CONFIGURATION
+    // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
-    const OPERATORS_KEY = "library_operators";
+    const GIST_ID = "43b3e922d0f18dbd967dacf9a103f3dc";
+    const GITHUB_TOKEN = "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";
     
+    // ======================
+    // GitHub Gist Storage System
+    // ======================
+    async function loadAdminData() {
+      try {
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        
+        if (!response.ok) throw new Error("Failed to fetch gist");
+        
+        const data = await response.json();
+        return JSON.parse(data.files['library_data.json'].content);
+      } catch (error) {
+        console.error("Error loading admin data:", error);
+        return { 
+          operators: [ADMIN_EMAIL],
+          rentals: {} 
+        };
+      }
+    }
+
+    async function saveAdminData(data) {
+      try {
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            files: {
+              'library_data.json': {
+                content: JSON.stringify(data)
+              }
+            }
+          })
+        });
+        
+        return response.ok;
+      } catch (error) {
+        console.error("Error saving admin data:", error);
+        return false;
+      }
+    }
+
     // ======================
     // Enhanced Google Auth Functions
     // ======================
@@ -580,9 +633,6 @@
           rentalPeriod: 14
         }));
       }
-      if (!localStorage.getItem(OPERATORS_KEY)) {
-        localStorage.setItem(OPERATORS_KEY, JSON.stringify([ADMIN_EMAIL]));
-      }
     }
 
     function updateWelcomeMessage() {
@@ -660,10 +710,10 @@
       // Modal Controls
       document.getElementById('rentalBtn').addEventListener('click', () => openModal('rentalInterface'));
       document.getElementById('settingsGear').addEventListener('click', () => openModal('settingsPanel'));
-      document.getElementById('adminBtn').addEventListener('click', () => {
+      document.getElementById('adminBtn').addEventListener('click', async () => {
         openModal('adminPanel');
-        renderUserList();
-        renderAllRentals();
+        await renderUserList();
+        await renderAllRentals();
       });
       document.getElementById('modalOverlay').addEventListener('click', closeModals);
       document.getElementById('closeRentalBtn').addEventListener('click', closeModals);
@@ -709,20 +759,20 @@
       document.getElementById('resetBgBtn').addEventListener('click', resetBackground);
 
       // Admin Controls
-      document.getElementById('addOperatorBtn').addEventListener('click', function() {
+      document.getElementById('addOperatorBtn').addEventListener('click', async function() {
         const email = document.getElementById('operatorEmail').value.trim();
         if (email) {
-          addOperator(email);
+          await addOperator(email);
           alert(`${email} is now an operator`);
-          renderUserList();
+          await renderUserList();
         }
       });
 
       document.querySelectorAll('#allRentalsTab .filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', async function() {
           document.querySelectorAll('#allRentalsTab .filter-btn').forEach(b => b.classList.remove('active'));
           this.classList.add('active');
-          renderAllRentals(this.dataset.filter);
+          await renderAllRentals(this.dataset.filter);
         });
       });
     });
@@ -734,9 +784,6 @@
       if (modalId === 'rentalInterface') {
         updateFilterCounts();
         updateRentalList('day');
-      } else if (modalId === 'adminPanel') {
-        renderUserList();
-        renderAllRentals();
       }
     }
 
@@ -753,7 +800,7 @@
       const studentId = document.getElementById('studentId').value.trim();
       
       if (bookId && studentId) {
-        let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
+        let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
         
         // Check if book is already rented
         const existingRental = rentals.find(r => r.bookId === bookId && !r.returnDate);
@@ -791,57 +838,92 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
+      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
       const now = new Date();
-      const filtered = rentals.filter(rental => {
-        const rentalDate = new Date(rental.rentalDate);
-        switch (range) {
-          case 'day': return rentalDate.toDateString() === now.toDateString();
-          case 'week': return (now - rentalDate) <= 604800000;
-          case 'month': return rentalDate.getMonth() === now.getMonth() && rentalDate.getFullYear() === now.getFullYear();
-          default: return true;
-        }
-      }).sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
+      let filtered = [];
+      
+      switch(range) {
+        case 'day':
+          filtered = rentals.filter(r => {
+            const rentalDate = new Date(r.rentalDate);
+            return rentalDate.toDateString() === now.toDateString();
+          });
+          break;
+        case 'week':
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay());
+          filtered = rentals.filter(r => new Date(r.rentalDate) >= weekStart);
+          break;
+        case 'month':
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          filtered = rentals.filter(r => new Date(r.rentalDate) >= monthStart);
+          break;
+        default:
+          filtered = rentals;
+      }
       
       const listEl = document.getElementById('rentalList');
-      listEl.innerHTML = filtered.length ? filtered.map(r => `
-        <div class="${r.returnDate ? 'returned' : 'active'}">
-          <div>
-            <strong>Book:</strong> ${r.bookId} | 
-            <strong>Student:</strong> ${r.studentId}<br>
-            <small>Rented: ${formatDate(r.rentalDate)} | 
-            Due: ${formatDate(r.dueDate)}</small>
-          </div>
-          <div>
-            ${!r.returnDate ? 
-              `<button onclick="returnBook('${r.bookId}')" class="return-btn">Return</button>` : 
-              `<small>Returned: ${formatDate(r.returnDate)}</small>`}
-            <button onclick="deleteRental('${r.bookId}')" class="delete-btn">X</button>
-          </div>
-        </div>
-      `).join('') : '<p>No rentals found</p>';
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<p>No rentals found</p>';
+        return;
+      }
       
-      document.getElementById('rentalInterface').dataset.currentFilter = range;
-      updateFilterCounts();
+      listEl.innerHTML = '';
+      filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
+      
+      filtered.forEach(rental => {
+        const rentalDate = new Date(rental.rentalDate);
+        const dueDate = new Date(rental.dueDate);
+        const isOverdue = !rental.returnDate && dueDate < now;
+        
+        const rentalEl = document.createElement('div');
+        rentalEl.className = rental.returnDate ? 'returned' : 'active';
+        
+        rentalEl.innerHTML = `
+          <div>
+            <strong>Book ID:</strong> ${rental.bookId}<br>
+            <strong>Student ID:</strong> ${rental.studentId}<br>
+            <small>Rented: ${rentalDate.toLocaleString()}</small><br>
+            <small ${isOverdue ? 'style="color:red;font-weight:bold;"' : ''}>
+              Due: ${dueDate.toLocaleDateString()}
+              ${isOverdue ? ' (OVERDUE)' : ''}
+            </small>
+          </div>
+          <div>
+            ${!rental.returnDate ? `<button class="return-btn" data-id="${rental.bookId}">Return</button>` : ''}
+            <button class="delete-btn" data-id="${rental.bookId}">Delete</button>
+          </div>
+        `;
+        
+        listEl.appendChild(rentalEl);
+      });
+      
+      // Add event listeners to buttons
+      document.querySelectorAll('.return-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          markAsReturned(this.getAttribute('data-id'));
+        });
+      });
+      
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          deleteRental(this.getAttribute('data-id'));
+        });
+      });
     }
 
-    function formatDate(isoString) {
-      const date = new Date(isoString);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-    }
-
-    function returnBook(bookId) {
+    function markAsReturned(bookId) {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
-      const rentalIndex = rentals.findIndex(r => r.bookId === bookId && !r.returnDate);
+      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+      const rental = rentals.find(r => r.bookId === bookId && !r.returnDate);
       
-      if (rentalIndex !== -1) {
-        rentals[rentalIndex].returnDate = new Date().toISOString();
-        rentals[rentalIndex].status = 'returned';
+      if (rental) {
+        rental.returnDate = new Date().toISOString();
+        rental.status = 'returned';
         localStorage.setItem(userEmail + '_rentals', JSON.stringify(rentals));
-        updateRentalList(document.getElementById('rentalInterface').dataset.currentFilter || 'day');
+        updateRentalList('day');
       }
     }
 
@@ -849,181 +931,308 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      if (!confirm("Are you sure you want to delete this rental record?")) return;
+      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+      const updated = rentals.filter(r => r.bookId !== bookId);
       
-      let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
-      rentals = rentals.filter(r => r.bookId !== bookId);
-      localStorage.setItem(userEmail + '_rentals', JSON.stringify(rentals));
-      updateRentalList(document.getElementById('rentalInterface').dataset.currentFilter || 'day');
+      localStorage.setItem(userEmail + '_rentals', JSON.stringify(updated));
+      updateRentalList('day');
     }
 
     function updateFilterCounts() {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
+      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
       const now = new Date();
       
-      document.getElementById('todayCount').textContent = rentals.filter(r => 
-        new Date(r.rentalDate).toDateString() === now.toDateString()
-      ).length;
+      // Today count
+      const todayCount = rentals.filter(r => {
+        const rentalDate = new Date(r.rentalDate);
+        return rentalDate.toDateString() === now.toDateString();
+      }).length;
       
-      document.getElementById('weekCount').textContent = rentals.filter(r => 
-        (now - new Date(r.rentalDate)) <= 604800000
-      ).length;
+      // This week count
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      const weekCount = rentals.filter(r => new Date(r.rentalDate) >= weekStart).length;
       
-      document.getElementById('monthCount').textContent = rentals.filter(r => 
-        new Date(r.rentalDate).getMonth() === now.getMonth() && 
-        new Date(r.rentalDate).getFullYear() === now.getFullYear()
-      ).length;
+      // This month count
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthCount = rentals.filter(r => new Date(r.rentalDate) >= monthStart).length;
+      
+      document.getElementById('todayCount').textContent = todayCount;
+      document.getElementById('weekCount').textContent = weekCount;
+      document.getElementById('monthCount').textContent = monthCount;
     }
 
     function checkOverdueBooks() {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || []);
+      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
       const now = new Date();
-      const overdueBooks = rentals.filter(r => 
-        !r.returnDate && new Date(r.dueDate) < now
-      );
+      const overdue = rentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
       
-      // Remove any existing notifications
-      document.querySelectorAll('.overdue-notification').forEach(el => el.remove());
-      
-      if (overdueBooks.length > 0) {
-        const notification = document.createElement('div');
-        notification.className = 'overdue-notification';
-        notification.innerHTML = `
-          <strong>Overdue Books Alert!</strong>
-          <p>You have ${overdueBooks.length} overdue book(s):</p>
-          <ul>
-            ${overdueBooks.map(b => `<li>Book ${b.bookId} (Due: ${formatDate(b.dueDate)})</li>`).join('')}
-          </ul>
-        `;
-        document.body.appendChild(notification);
-        
-        // Auto-remove after 10 seconds
-        setTimeout(() => notification.remove(), 10000);
+      if (overdue.length > 0) {
+        showOverdueNotification(overdue.length);
       }
+    }
+
+    function showOverdueNotification(count) {
+      // Remove existing notification if any
+      const existing = document.querySelector('.overdue-notification');
+      if (existing) existing.remove();
+      
+      const notification = document.createElement('div');
+      notification.className = 'overdue-notification';
+      notification.innerHTML = `
+        <strong>Overdue Books!</strong>
+        <p>You have ${count} ${count === 1 ? 'book' : 'books'} overdue for return.</p>
+        <button onclick="this.parentElement.remove()">Dismiss</button>
+      `;
+      
+      document.body.appendChild(notification);
+      
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.remove();
+        }
+      }, 10000);
     }
 
     function loadSettings() {
-      // Load background settings
-      const savedColor = localStorage.getItem('bgColor') || '#f0f8ff';
-      const savedImage = localStorage.getItem('bgImage') || 'none';
-      const savedOpacity = localStorage.getItem('bgOpacity') || '0.8';
-      const savedBlur = localStorage.getItem('bgBlur') || '0';
-
-      document.documentElement.style.setProperty('--bg-color', savedColor);
-      document.documentElement.style.setProperty('--bg-image', savedImage);
-      document.documentElement.style.setProperty('--bg-opacity', savedOpacity);
-      document.documentElement.style.setProperty('--bg-blur', savedBlur + 'px');
+      const settings = JSON.parse(localStorage.getItem('appSettings') || {};
       
-      document.getElementById('bgColor').value = savedColor;
-      document.getElementById('bgOpacity').value = savedOpacity;
-      document.getElementById('bgBlur').value = savedBlur;
-      document.getElementById('opacityValue').textContent = Math.round(savedOpacity * 100) + '%';
-      document.getElementById('blurValue').textContent = savedBlur + 'px';
-      
-      if (savedImage !== 'none') {
-        document.getElementById('bgPreview').style.backgroundImage = savedImage;
+      // Background settings
+      if (settings.bgColor) {
+        document.documentElement.style.setProperty('--bg-color', settings.bgColor);
+        document.getElementById('bgColor').value = settings.bgColor;
       }
       
-      // Load app settings
-      const appSettings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 });
-      document.getElementById('rentalPeriod').value = appSettings.rentalPeriod;
+      if (settings.bgImage) {
+        document.documentElement.style.setProperty('--bg-image', `url(${settings.bgImage})`);
+        document.getElementById('bgPreview').style.backgroundImage = `url(${settings.bgImage})`;
+      }
+      
+      if (settings.bgOpacity !== undefined) {
+        document.documentElement.style.setProperty('--bg-opacity', settings.bgOpacity);
+        document.getElementById('bgOpacity').value = settings.bgOpacity;
+        document.getElementById('opacityValue').textContent = Math.round(settings.bgOpacity * 100) + '%';
+      }
+      
+      if (settings.bgBlur !== undefined) {
+        document.documentElement.style.setProperty('--bg-blur', `${settings.bgBlur}px`);
+        document.getElementById('bgBlur').value = settings.bgBlur;
+        document.getElementById('blurValue').textContent = `${settings.bgBlur}px`;
+      }
+      
+      if (settings.rentalPeriod) {
+        document.getElementById('rentalPeriod').value = settings.rentalPeriod;
+      }
     }
 
     function saveSettings() {
-      // Save background settings
-      const color = document.getElementById('bgColor').value;
-      document.documentElement.style.setProperty('--bg-color', color);
-      localStorage.setItem('bgColor', color);
+      const settings = {
+        bgColor: document.getElementById('bgColor').value,
+        bgOpacity: parseFloat(document.getElementById('bgOpacity').value),
+        bgBlur: parseInt(document.getElementById('bgBlur').value),
+        rentalPeriod: parseInt(document.getElementById('rentalPeriod').value)
+      };
       
-      const bgImageUpload = document.getElementById('bgImageUpload');
-      if (bgImageUpload.files[0]) {
+      // Handle background image if uploaded
+      const fileInput = document.getElementById('bgImageUpload');
+      if (fileInput.files[0]) {
         const reader = new FileReader();
         reader.onload = function(e) {
-          const bgImage = `url(${e.target.result})`;
-          document.documentElement.style.setProperty('--bg-image', bgImage);
-          document.getElementById('bgPreview').style.backgroundImage = bgImage;
-          localStorage.setItem('bgImage', bgImage);
+          settings.bgImage = e.target.result;
+          localStorage.setItem('appSettings', JSON.stringify(settings));
+          applySettings(settings);
+          closeModals();
         };
-        reader.readAsDataURL(bgImageUpload.files[0]);
+        reader.readAsDataURL(fileInput.files[0]);
+      } else {
+        localStorage.setItem('appSettings', JSON.stringify(settings));
+        applySettings(settings);
+        closeModals();
       }
+    }
+
+    function applySettings(settings) {
+      document.documentElement.style.setProperty('--bg-color', settings.bgColor);
+      document.documentElement.style.setProperty('--bg-opacity', settings.bgOpacity);
+      document.documentElement.style.setProperty('--bg-blur', `${settings.bgBlur}px`);
       
-      const opacity = document.getElementById('bgOpacity').value;
-      const blur = document.getElementById('bgBlur').value;
-      
-      document.documentElement.style.setProperty('--bg-opacity', opacity);
-      document.documentElement.style.setProperty('--bg-blur', blur + 'px');
-      document.getElementById('bgPreview').style.setProperty('--preview-opacity', opacity);
-      document.getElementById('bgPreview').style.setProperty('--preview-blur', blur + 'px');
-      
-      localStorage.setItem('bgOpacity', opacity);
-      localStorage.setItem('bgBlur', blur);
-      
-      // Save app settings
-      const rentalPeriod = parseInt(document.getElementById('rentalPeriod').value) || 14;
-      localStorage.setItem('appSettings', JSON.stringify({
-        rentalPeriod: rentalPeriod
-      }));
-      
-      closeModals();
+      if (settings.bgImage) {
+        document.documentElement.style.setProperty('--bg-image', `url(${settings.bgImage})`);
+      }
     }
 
     function resetBackground() {
-      const defaultColor = '#f0f8ff';
-      const defaultOpacity = '0.8';
-      const defaultBlur = '0';
+      const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+      delete settings.bgColor;
+      delete settings.bgImage;
+      delete settings.bgOpacity;
+      delete settings.bgBlur;
       
-      document.documentElement.style.setProperty('--bg-color', defaultColor);
-      document.documentElement.style.setProperty('--bg-image', 'none');
-      document.documentElement.style.setProperty('--bg-opacity', defaultOpacity);
-      document.documentElement.style.setProperty('--bg-blur', defaultBlur + 'px');
+      localStorage.setItem('appSettings', JSON.stringify(settings));
+      loadSettings();
       
+      // Reset form fields
+      document.getElementById('bgColor').value = '#f0f8ff';
+      document.getElementById('bgOpacity').value = 0.8;
+      document.getElementById('opacityValue').textContent = '80%';
+      document.getElementById('bgBlur').value = 0;
+      document.getElementById('blurValue').textContent = '0px';
       document.getElementById('bgPreview').style.backgroundImage = 'none';
-      document.getElementById('bgPreview').style.setProperty('--preview-opacity', defaultOpacity);
-      document.getElementById('bgPreview').style.setProperty('--preview-blur', defaultBlur + 'px');
-      
-      document.getElementById('bgColor').value = defaultColor;
-      document.getElementById('bgOpacity').value = defaultOpacity;
-      document.getElementById('bgBlur').value = defaultBlur;
-      document.getElementById('opacityValue').textContent = Math.round(defaultOpacity * 100) + '%';
-      document.getElementById('blurValue').textContent = defaultBlur + 'px';
       document.getElementById('bgImageUpload').value = '';
       
-      localStorage.removeItem('bgImage');
-      localStorage.setItem('bgColor', defaultColor);
-      localStorage.setItem('bgOpacity', defaultOpacity);
-      localStorage.setItem('bgBlur', defaultBlur);
+      // Apply reset
+      document.documentElement.style.setProperty('--bg-color', '#f0f8ff');
+      document.documentElement.style.setProperty('--bg-image', 'none');
+      document.documentElement.style.setProperty('--bg-opacity', '0.8');
+      document.documentElement.style.setProperty('--bg-blur', '0px');
     }
 
     // ======================
-    // ADMIN SYSTEM FUNCTIONS
+    // Admin Panel Functions
     // ======================
-    function isOperator(email) {
-      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
-      return operators.includes(email);
-    }
-
-    function addOperator(email) {
-      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
-      if (!operators.includes(email)) {
-        operators.push(email);
-        localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
+    async function renderUserList() {
+      const users = await getAllUsers();
+      const userListEl = document.getElementById('userList');
+      
+      if (users.length === 0) {
+        userListEl.innerHTML = '<p>No users found</p>';
+        return;
       }
+      
+      userListEl.innerHTML = '';
+      users.forEach(user => {
+        const userEl = document.createElement('div');
+        userEl.className = 'user-row';
+        
+        userEl.innerHTML = `
+          <div>
+            ${user.email}
+            ${user.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
+            ${user.isOperator && !user.isAdmin ? '<span class="operator-badge">Operator</span>' : ''}
+          </div>
+          <div>
+            ${!user.isAdmin ? `
+              <button class="delete-btn" data-email="${user.email}">Remove</button>
+              ${user.isOperator ? `
+                <button class="operator-btn" data-email="${user.email}">Demote</button>
+              ` : `
+                <button class="operator-btn" data-email="${user.email}">Make Operator</button>
+              `}
+            ` : ''}
+          </div>
+        `;
+        
+        userListEl.appendChild(userEl);
+      });
+      
+      // Add event listeners
+      document.querySelectorAll('.operator-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const email = this.getAttribute('data-email');
+          if (this.textContent.includes('Make')) {
+            await addOperator(email);
+          } else {
+            await removeOperator(email);
+          }
+          await renderUserList();
+        });
+      });
+      
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const email = this.getAttribute('data-email');
+          if (confirm(`Remove all data for ${email}?`)) {
+            localStorage.removeItem(email + '_rentals');
+            await removeOperator(email);
+            await renderUserList();
+          }
+        });
+      });
+      
+      // Update stats
+      document.getElementById('totalUsers').textContent = users.length;
     }
 
-    function removeOperator(email) {
-      let operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
-      operators = operators.filter(op => op !== email && op !== ADMIN_EMAIL); // Can't remove admin
-      localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
+    async function renderAllRentals(filter = 'all') {
+      const users = await getAllUsers();
+      const listEl = document.getElementById('globalRentalList');
+      const now = new Date();
+      
+      let allRentals = [];
+      users.forEach(user => {
+        user.rentals.forEach(rental => {
+          allRentals.push({
+            ...rental,
+            userEmail: user.email
+          });
+        });
+      });
+      
+      // Apply filter
+      let filtered = [];
+      switch(filter) {
+        case 'active':
+          filtered = allRentals.filter(r => !r.returnDate);
+          break;
+        case 'overdue':
+          filtered = allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
+          break;
+        default:
+          filtered = allRentals;
+      }
+      
+      // Sort by date (newest first)
+      filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
+      
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<p>No rentals found</p>';
+        return;
+      }
+      
+      listEl.innerHTML = '';
+      filtered.forEach(rental => {
+        const rentalDate = new Date(rental.rentalDate);
+        const dueDate = new Date(rental.dueDate);
+        const isOverdue = !rental.returnDate && dueDate < now;
+        
+        const rentalEl = document.createElement('div');
+        rentalEl.className = rental.returnDate ? 'returned' : 'active';
+        
+        rentalEl.innerHTML = `
+          <div>
+            <strong>Book ID:</strong> ${rental.bookId}<br>
+            <strong>Student ID:</strong> ${rental.studentId}<br>
+            <strong>Librarian:</strong> ${rental.userEmail}<br>
+            <small>Rented: ${rentalDate.toLocaleString()}</small><br>
+            <small ${isOverdue ? 'style="color:red;font-weight:bold;"' : ''}>
+              Due: ${dueDate.toLocaleDateString()}
+              ${isOverdue ? ' (OVERDUE)' : ''}
+            </small>
+          </div>
+        `;
+        
+        listEl.appendChild(rentalEl);
+      });
+      
+      // Update stats
+      document.getElementById('totalActiveRentals').textContent = 
+        allRentals.filter(r => !r.returnDate).length;
+      document.getElementById('totalOverdueRentals').textContent = 
+        allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now).length;
     }
 
-    function getAllUsers() {
+    async function getAllUsers() {
+      const adminData = await loadAdminData();
       const users = [];
+      
+      // Get local users
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key.endsWith('_rentals')) {
@@ -1031,93 +1240,27 @@
           users.push({
             email,
             isAdmin: email === ADMIN_EMAIL,
-            isOperator: isOperator(email),
+            isOperator: adminData.operators.includes(email),
             rentals: JSON.parse(localStorage.getItem(key)) || []
           });
         }
       }
+      
       return users;
     }
 
-    function renderUserList() {
-      const users = getAllUsers();
-      const userList = document.getElementById('userList');
-      userList.innerHTML = users.map(user => `
-        <div class="user-row">
-          <span>${user.email}</span>
-          <div>
-            ${user.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
-            ${user.isOperator && !user.isAdmin ? 
-              `<span class="operator-badge">Operator</span>
-               <button onclick="removeOperator('${user.email}')" class="delete-btn">Remove</button>` : ''}
-          </div>
-        </div>
-      `).join('');
-      document.getElementById('totalUsers').textContent = users.length;
-    }
-
-    function renderAllRentals(filter = 'all') {
-      const users = getAllUsers();
-      let allRentals = [];
-      let activeCount = 0;
-      let overdueCount = 0;
-      const now = new Date();
-      
-      users.forEach(user => {
-        user.rentals.forEach(rental => {
-          rental.owner = user.email;
-          allRentals.push(rental);
-          if (!rental.returnDate) {
-            activeCount++;
-            if (new Date(rental.dueDate) < now) {
-              overdueCount++;
-            }
-          }
-        });
-      });
-      
-      if (filter === 'active') {
-        allRentals = allRentals.filter(r => !r.returnDate);
-      } else if (filter === 'overdue') {
-        allRentals = allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
-      }
-      
-      const listEl = document.getElementById('globalRentalList');
-      listEl.innerHTML = allRentals.map(r => `
-        <div class="${r.returnDate ? 'returned' : 'active'}">
-          <div>
-            <strong>Book:</strong> ${r.bookId} | 
-            <strong>Student:</strong> ${r.studentId}<br>
-            <small>Owner: ${r.owner} | Rented: ${formatDate(r.rentalDate)}</small>
-          </div>
-          <div>
-            ${!r.returnDate ? `<button onclick="adminReturnBook('${r.bookId}', '${r.owner}')" class="return-btn">Return</button>` : ''}
-            <button onclick="adminDeleteRental('${r.bookId}', '${r.owner}')" class="delete-btn">X</button>
-          </div>
-        </div>
-      `).join('');
-      
-      document.getElementById('totalActiveRentals').textContent = activeCount;
-      document.getElementById('totalOverdueRentals').textContent = overdueCount;
-    }
-
-    function adminReturnBook(bookId, ownerEmail) {
-      let rentals = JSON.parse(localStorage.getItem(`${ownerEmail}_rentals`) || '[]');
-      const rentalIndex = rentals.findIndex(r => r.bookId === bookId && !r.returnDate);
-      
-      if (rentalIndex !== -1) {
-        rentals[rentalIndex].returnDate = new Date().toISOString();
-        localStorage.setItem(`${ownerEmail}_rentals`, JSON.stringify(rentals));
-        renderAllRentals();
+    async function addOperator(email) {
+      const adminData = await loadAdminData();
+      if (!adminData.operators.includes(email)) {
+        adminData.operators.push(email);
+        await saveAdminData(adminData);
       }
     }
 
-    function adminDeleteRental(bookId, ownerEmail) {
-      if (!confirm("Delete this rental permanently?")) return;
-      let rentals = JSON.parse(localStorage.getItem(`${ownerEmail}_rentals`) || '[]');
-      rentals = rentals.filter(r => r.bookId !== bookId);
-      localStorage.setItem(`${ownerEmail}_rentals`, JSON.stringify(rentals));
-      renderAllRentals();
+    async function removeOperator(email) {
+      const adminData = await loadAdminData();
+      adminData.operators = adminData.operators.filter(op => op !== email && op !== ADMIN_EMAIL);
+      await saveAdminData(adminData);
     }
   </script>
 </body>
