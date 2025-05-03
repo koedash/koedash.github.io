@@ -42,7 +42,7 @@
       box-shadow: 0 0 20px rgba(0,0,0,0.2);
     }
     
-    /* Google Button Fix */
+    /* Google Button */
     #google-signin-container {
       margin: 20px auto;
       width: 240px;
@@ -709,7 +709,7 @@
       document.getElementById('resetBgBtn').addEventListener('click', resetBackground);
 
       // Admin Controls
-      document.getElementById('addOperatorBtn')?.addEventListener('click', function() {
+      document.getElementById('addOperatorBtn').addEventListener('click', function() {
         const email = document.getElementById('operatorEmail').value.trim();
         if (email) {
           addOperator(email);
@@ -1009,7 +1009,7 @@
     }
 
     function addOperator(email) {
-      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]';
+      const operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
       if (!operators.includes(email)) {
         operators.push(email);
         localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
@@ -1017,7 +1017,7 @@
     }
 
     function removeOperator(email) {
-      let operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]';
+      let operators = JSON.parse(localStorage.getItem(OPERATORS_KEY) || '[]');
       operators = operators.filter(op => op !== email && op !== ADMIN_EMAIL); // Can't remove admin
       localStorage.setItem(OPERATORS_KEY, JSON.stringify(operators));
     }
