@@ -514,39 +514,41 @@
     // SECURITY CONFIGURATION
     // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
-    const CLOUDFLARE_WORKER_URL = "https://libsr.koedash121211.workers.dev/";
+    const WORKER_URL = "https://libsr.koedash121211.workers.dev/";
     
     // ======================
-    // GitHub Gist Storage System (via Cloudflare Worker)
+    // GitHub Data Functions
     // ======================
-    async function loadAdminData() {
-      try {
-        const response = await fetch(CLOUDFLARE_WORKER_URL);
-        if (!response.ok) throw new Error("Failed to fetch from worker");
-        return await response.json();
-      } catch (error) {
-        console.error("Error loading admin data:", error);
-        return { 
-          operators: [ADMIN_EMAIL],
-          rentals: {} 
-        };
-      }
-    }
-
-    async function saveAdminData(data) {
-      try {
-        const response = await fetch(CLOUDFLARE_WORKER_URL, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        return response.ok;
-      } catch (error) {
-        console.error("Error saving admin data:", error);
-        return false;
-      }
-    }
-
+        async function loadAdminData() {
+          try {
+            const response = await fetch(WORKER_URL);
+            if (!response.ok) throw new Error(`Worker error: ${response.status}`);
+            return await response.json();
+          } catch (error) {
+            console.error("Failed to load data:", error);
+            return { 
+              operators: [ADMIN_EMAIL], // Fallback data
+              rentals: {} 
+            };
+          }
+        }
+        
+        async function saveAdminData(data) {
+          try {
+            const response = await fetch(WORKER_URL, {
+              method: 'PATCH',
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest' // Security header
+              },
+              body: JSON.stringify(data)
+            });
+            return response.ok;
+          } catch (error) {
+            console.error("Failed to save data:", error);
+            return false;
+          }
+        }
     // ======================
     // Google OAuth Functions
     // ======================
