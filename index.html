@@ -514,21 +514,15 @@
     // SECURITY CONFIGURATION
     // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
-    const GIST_ID = "8f94f796377a74a97c78cbb1edcbd933";
-    const GITHUB_TOKEN = "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";
     
     // ======================
     // GitHub Gist Storage System
     // ======================
     async function loadAdminData() {
-      try {
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-          headers: {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28'
-          }
-        });
+      const response = await fetch("https://libsr.koedash121211.workers.dev/");
+      return await response.json(); // Worker already returns parsed JSON
+    }
+  });
         
         if (!response.ok) throw new Error("Failed to fetch gist");
         
@@ -544,23 +538,13 @@
     }
 
     async function saveAdminData(data) {
-      try {
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-            'X-GitHub-Api-Version': '2022-11-28'
-          },
-          body: JSON.stringify({
-            files: {
-              'library_data.json': {
-                content: JSON.stringify(data)
-              }
-            }
-          })
-        });
+      const response = await fetch("https://libsr.koedash121211.workers.dev/", {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data) // Send data directly; Worker handles GitHub formatting
+      });
+      return response.ok;
+    }
         
         return response.ok;
       } catch (error) {
