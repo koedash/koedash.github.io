@@ -1131,65 +1131,53 @@
     }
 
     async function renderAllRentals(filter = 'all') {
-      const adminData = await loadAdminData();
-      const allRentals = [];
-      
-      // Get rentals from ALL users
-      for (const userEmail in adminData.rentals) {
-        allRentals.push(...adminData.rentals[userEmail]);
-      }
-      
-      // Apply filter
-      let filtered = [];
-      switch(filter) {
-        case 'active':
-          filtered = allRentals.filter(r => !r.returnDate);
-          break;
-        case 'overdue':
-          filtered = allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
-          break;
-        default:
-          filtered = allRentals;
-      }
-      
-      // Sort by date (newest first)
-      filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
-      
-      if (filtered.length === 0) {
-        listEl.innerHTML = '<p>No rentals found</p>';
-        return;
-      }
-      
-      listEl.innerHTML = '';
-      filtered.forEach(rental => {
-        const rentalDate = new Date(rental.rentalDate);
-        const dueDate = new Date(rental.dueDate);
-        const isOverdue = !rental.returnDate && dueDate < now;
+      try {
+        // 1. Get the container element first
+        const listEl = document.getElementById('globalRentalList');
+        if (!listEl) throw new Error("Rental list container not found");
+    
+        // 2. Clear previous content
+        listEl.innerHTML = '<p>Loading rentals...</p>';
+    
+        // 3. Load and process data
+        const adminData = await loadAdminData();
+        const allRentals = [];
         
-        const rentalEl = document.createElement('div');
-        rentalEl.className = rental.returnDate ? 'returned' : 'active';
-        
-        rentalEl.innerHTML = `
-          <div>
-            <strong>Book ID:</strong> ${rental.bookId}<br>
-            <strong>Student ID:</strong> ${rental.studentId}<br>
-            <strong>Librarian:</strong> ${rental.userEmail}<br>
-            <small>Rented: ${rentalDate.toLocaleString()}</small><br>
-            <small ${isOverdue ? 'style="color:red;font-weight:bold;"' : ''}>
-              Due: ${dueDate.toLocaleDateString()}
-              ${isOverdue ? ' (OVERDUE)' : ''}
-            </small>
-          </div>
-        `;
-        
-        listEl.appendChild(rentalEl);
-      });
-      
-      // Update stats
-      document.getElementById('totalActiveRentals').textContent = 
-        allRentals.filter(r => !r.returnDate).length;
-      document.getElementById('totalOverdueRentals').textContent = 
-        allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now).length;
+        // Collect rentals from all users
+        for (const userEmail in adminData.rentals) {
+          allRentals.push(...adminData.rentals[userEmail]);
+        }
+    
+        // Filter based on selected tab
+        const filtered = filter === 'all' ? allRentals : 
+          filter === 'active' ? allRentals.filter(r => !r.returnDate) :
+          allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < new Date());
+    
+        // 4. Render results
+        if (filtered.length === 0) {
+          listEl.innerHTML = '<p>No rentals found</p>';
+          return;
+        }
+    
+        listEl.innerHTML = '';
+        filtered.forEach(rental => {
+          const rentalEl = document.createElement('div');
+          rentalEl.className = rental.returnDate ? 'returned' : 'active';
+          rentalEl.innerHTML = `
+            <div>
+              <strong>Book ID:</strong> ${rental.bookId}<br>
+              <strong>Student ID:</strong> ${rental.studentId}<br>
+              <small>Rented: ${new Date(rental.rentalDate).toLocaleString()}</small>
+            </div>
+          `;
+          listEl.appendChild(rentalEl);
+        });
+    
+      } catch (error) {
+        console.error("Failed to render rentals:", error);
+        const listEl = document.getElementById('globalRentalList');
+        if (listEl) listEl.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+      }
     }
 
     async function getAllUsers() {
