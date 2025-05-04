@@ -811,40 +811,41 @@
       }
     }
 
-    function updateRentalList(range) {
+    async function updateRentalList(range) {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const adminData = loadAdminData();
-      const rentals = adminData.rentals[userEmail] || [];
-      const now = new Date();
-      let filtered = [];
-      
-      switch(range) {
-        case 'day':
-          filtered = rentals.filter(r => {
-            const rentalDate = new Date(r.rentalDate);
-            return rentalDate.toDateString() === now.toDateString();
-          });
-          break;
-        case 'week':
-          const weekStart = new Date(now);
-          weekStart.setDate(now.getDate() - now.getDay());
-          filtered = rentals.filter(r => new Date(r.rentalDate) >= weekStart);
-          break;
-        case 'month':
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          filtered = rentals.filter(r => new Date(r.rentalDate) >= monthStart);
-          break;
-        default:
-          filtered = rentals;
-      }
-      
-      const listEl = document.getElementById('rentalList');
-      if (filtered.length === 0) {
-        listEl.innerHTML = '<p>No rentals found</p>';
-        return;
-      }
+      try {
+        const adminData = await loadAdminData();
+        const rentals = adminData.rentals[userEmail] || []; // Handle undefined case
+        const now = new Date();
+        let filtered = [];
+        
+        switch(range) {
+          case 'day':
+            filtered = rentals.filter(r => {
+              const rentalDate = new Date(r.rentalDate);
+              return rentalDate.toDateString() === now.toDateString();
+            });
+            break;
+          case 'week':
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay());
+            filtered = rentals.filter(r => new Date(r.rentalDate) >= weekStart);
+            break;
+          case 'month':
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            filtered = rentals.filter(r => new Date(r.rentalDate) >= monthStart);
+            break;
+          default:
+            filtered = rentals;
+        }
+        
+        const listEl = document.getElementById('rentalList');
+        if (filtered.length === 0) {
+          listEl.innerHTML = '<p>No rentals found</p>';
+          return;
+        }
       
       listEl.innerHTML = '';
       filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
@@ -888,6 +889,10 @@
           deleteRental(this.getAttribute('data-id'));
         });
       });
+        } catch (error) {
+        console.error("Error updating rental list:", error);
+        document.getElementById('rentalList').innerHTML = '<p>Error loading rentals</p>';
+      }
     }
 
     function markAsReturned(bookId) {
@@ -908,44 +913,30 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const adminData = loadAdminData();
-      const rentals = adminData.rentals[userEmail] || [];
-      const now = new Date();
-      
-      // Today count
-      const todayCount = rentals.filter(r => {
-        const rentalDate = new Date(r.rentalDate);
-        return rentalDate.toDateString() === now.toDateString();
-      }).length;
-      
-      // This week count
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - now.getDay());
-      const weekCount = rentals.filter(r => new Date(r.rentalDate) >= weekStart).length;
-      
-      // This month count
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthCount = rentals.filter(r => new Date(r.rentalDate) >= monthStart).length;
-      
-      document.getElementById('todayCount').textContent = todayCount;
-      document.getElementById('weekCount').textContent = weekCount;
-      document.getElementById('monthCount').textContent = monthCount;
+      loadAdminData().then(adminData => {
+        const rentals = adminData.rentals[userEmail] || []; // Handle undefined case
+        const now = new Date();
+        
+        // Today count
+        const todayCount = rentals.filter(r => {
+          const rentalDate = new Date(r.rentalDate);
+          return rentalDate.toDateString() === now.toDateString();
+        }).length;
+        
+        // This week count
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - now.getDay());
+        const weekCount = rentals.filter(r => new Date(r.rentalDate) >= weekStart).length;
+        
+        // This month count
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthCount = rentals.filter(r => new Date(r.rentalDate) >= monthStart).length;
+        
+        document.getElementById('todayCount').textContent = todayCount;
+        document.getElementById('weekCount').textContent = weekCount;
+        document.getElementById('monthCount').textContent = monthCount;
+      });
     }
-
-    function checkOverdueBooks() {
-      const userEmail = sessionStorage.getItem('userEmail');
-      if (!userEmail) return;
-      
-      const adminData = loadAdminData();
-      const rentals = adminData.rentals[userEmail] || [];
-      const now = new Date();
-      const overdue = rentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
-      
-      if (overdue.length > 0) {
-        showOverdueNotification(overdue.length);
-      }
-    }
-
     function showOverdueNotification(count) {
       // Remove existing notification if any
       const existing = document.querySelector('.overdue-notification');
