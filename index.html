@@ -535,17 +535,17 @@
         
         async function saveAdminData(data) {
           try {
-            const response = await fetch(WORKER_URL, {
+            const response = await fetch("https://libsr.koedash121211.workers.dev/", {
               method: 'PATCH',
               headers: { 
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Security header
+                'Content-Type': 'application/json'
+                // Remove 'X-Requested-With' unless explicitly needed
               },
               body: JSON.stringify(data)
             });
             return response.ok;
           } catch (error) {
-            console.error("Failed to save data:", error);
+            console.error("Save failed:", error);
             return false;
           }
         }
