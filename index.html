@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html>
 <head>
   <title>Library Helper</title>
@@ -515,7 +515,7 @@
     // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
     const GIST_ID = "8dd82feff8afa0d1fa77d939f1369f62";
-    const GITHUB_TOKEN = "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";
+    const GITHUB_TOKEN = "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";
     
     // ======================
     // GitHub Gist Storage System
@@ -524,8 +524,9 @@
       try {
         const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
           headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
+            'Authorization': `Bearer ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28'
           }
         });
         
@@ -547,9 +548,10 @@
         const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+            'X-GitHub-Api-Version': '2022-11-28'
           },
           body: JSON.stringify({
             files: {
