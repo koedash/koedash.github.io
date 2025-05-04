@@ -744,19 +744,19 @@
         
         switch(range) {
           case 'day':
-            filtered = rentals.filter(r => {
-              const rentalDate = new Date(r.rentalDate);
+            filtered = rentals.filter(rental => {  // Changed 'r' to 'rental' for clarity
+              const rentalDate = new Date(rental.rentalDate);
               return rentalDate.toDateString() === now.toDateString();
             });
             break;
           case 'week':
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() - now.getDay());
-            filtered = rentals.filter(r => new Date(r.rentalDate) >= weekStart);
+            filtered = rentals.filter(rental => new Date(rental.rentalDate) >= weekStart);
             break;
           case 'month':
             const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            filtered = rentals.filter(r => new Date(r.rentalDate) >= monthStart);
+            filtered = rentals.filter(rental => new Date(rental.rentalDate) >= monthStart);
             break;
           default:
             filtered = rentals;
@@ -772,8 +772,8 @@
         filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
         
         filtered.forEach(rental => {
-          const rentalDate = new Date(r.rentalDate);
-          const dueDate = new Date(r.dueDate);
+          const rentalDate = new Date(rental.rentalDate);
+          const dueDate = new Date(rental.dueDate);
           const isOverdue = !rental.returnDate && dueDate < now;
           
           const rentalEl = document.createElement('div');
@@ -814,7 +814,7 @@
         
       } catch (error) {
         console.error("Error updating rental list:", error);
-        document.getElementById('rentalList').innerHTML = '<p>Error loading rentals</p>';
+        document.getElementById('rentalList').innerHTML = '<p>Error loading rentals. Please refresh.</p>';
       }
     }
 
@@ -836,27 +836,44 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const adminData = await loadAdminData();
-      const rentals = adminData.rentals[userEmail] || [];
-      const now = new Date();
-      
-      const todayCount = rentals.filter(r => {
-        const rentalDate = new Date(r.rentalDate);
-        return rentalDate.toDateString() === now.toDateString();
-      }).length;
-      
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - now.getDay());
-      const weekCount = rentals.filter(r => new Date(r.rentalDate) >= weekStart).length;
-      
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthCount = rentals.filter(r => new Date(r.rentalDate) >= monthStart).length;
-      
-      document.getElementById('todayCount').textContent = todayCount;
-      document.getElementById('weekCount').textContent = weekCount;
-      document.getElementById('monthCount').textContent = monthCount;
+      try {
+        const adminData = await loadAdminData();
+        const rentals = adminData.rentals[userEmail] || [];
+        const now = new Date();
+        
+        // Today count (rentals from today)
+        const todayCount = rentals.filter(rental => {
+          const rentalDate = new Date(rental.rentalDate);
+          return rentalDate.toDateString() === now.toDateString();
+        }).length;
+        
+        // This week count (since Sunday of current week)
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - now.getDay()); // Go back to Sunday
+        weekStart.setHours(0, 0, 0, 0);
+        const weekCount = rentals.filter(rental => {
+          return new Date(rental.rentalDate) >= weekStart;
+        }).length;
+        
+        // This month count (since 1st of current month)
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthCount = rentals.filter(rental => {
+          return new Date(rental.rentalDate) >= monthStart;
+        }).length;
+        
+        // Update the UI
+        document.getElementById('todayCount').textContent = todayCount;
+        document.getElementById('weekCount').textContent = weekCount;
+        document.getElementById('monthCount').textContent = monthCount;
+        
+      } catch (error) {
+        console.error("Error updating filter counts:", error);
+        // Set all counts to 0 if there's an error
+        document.getElementById('todayCount').textContent = '0';
+        document.getElementById('weekCount').textContent = '0';
+        document.getElementById('monthCount').textContent = '0';
+      }
     }
-
     async function renderAllRentals(filter = 'all') {
       try {
         const listEl = document.getElementById('globalRentalList');
