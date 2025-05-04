@@ -762,45 +762,49 @@
       document.querySelectorAll('.modal-window').forEach(m => m.style.display = 'none');
     }
 
-    function processRental() {
+    async function processRental() {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return alert("Please login first!");
-      
+    
       const bookId = document.getElementById('bookId').value.trim();
       const studentId = document.getElementById('studentId').value.trim();
-      
+    
       if (bookId && studentId) {
-        let rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+        // 1. Load current data
+        const adminData = await loadAdminData();
         
-        // Check if book is already rented
-        const existingRental = rentals.find(r => r.bookId === bookId && !r.returnDate);
-        if (existingRental) {
-          return alert(`This book is already rented to student ${existingRental.studentId}`);
+        // 2. Initialize user's rental array if not exists
+        if (!adminData.rentals[userEmail]) {
+          adminData.rentals[userEmail] = [];
         }
-        
-        const now = new Date();
-        const dueDate = new Date();
-        
-        // Get rental period from settings
+    
+        // 3. Check for existing rental
+        const existing = adminData.rentals[userEmail].find(r => 
+          r.bookId === bookId && !r.returnDate
+        );
+        if (existing) return alert(`Book already rented to ${existing.studentId}`);
+    
+        // 4. Add new rental
         const settings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 });
-        dueDate.setDate(now.getDate() + settings.rentalPeriod);
-        
-        rentals.push({
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + settings.rentalPeriod);
+    
+        adminData.rentals[userEmail].push({
           bookId,
           studentId,
-          rentalDate: now.toISOString(),
+          rentalDate: new Date().toISOString(),
           dueDate: dueDate.toISOString(),
-          returnDate: null,
-          status: 'active'
+          returnDate: null
         });
-        
-        localStorage.setItem(userEmail + '_rentals', JSON.stringify(rentals));
-        updateRentalList('day');
+    
+        // 5. Save to server
+        const success = await saveAdminData(adminData);
+        if (!success) throw new Error("Failed to save to server");
+    
+        // 6. Update UI
         document.getElementById('bookId').value = '';
         document.getElementById('studentId').value = '';
-        document.querySelector('.tab[data-tab="list"]').click();
-      } else {
-        alert('Please enter both IDs!');
+        updateRentalList('day');
       }
     }
 
