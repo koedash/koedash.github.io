@@ -377,21 +377,9 @@
   <!-- Login Screen -->
   <div id="login-container">
     <h2>Library Helper Login</h2>
-    <!-- Custom Google Sign-In Button -->
-    <div id="google-signin-container" onclick="handleAuthClick()">
-      <div id="customGoogleBtn">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google logo"/>
-        <span>Sign in with Google</span>
-      </div>
-    </div>
-    
-    <!-- Fallback Login for testing -->
-    <div id="fallback-login">
-      <h3>Test Login (Development Only)</h3>
-      <input type="text" id="test-email" placeholder="Enter test email">
-      <button onclick="testLogin()">Test Login</button>
-    </div>
-    
+    <input type="email" id="login-email" class="login-input" placeholder="Email" value="koedash121211@gmail.com">
+    <input type="password" id="login-password" class="login-input" placeholder="Password" value="admin123">
+    <button class="login-btn" onclick="login()">Login</button>
     <div id="login-status"></div>
   </div>
 
@@ -543,6 +531,7 @@
     // SECURITY CONFIGURATION
     // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
+    const ADMIN_PASSWORD = "admin123";
     const GIST_ID = "43b3e922d0f18dbd967dacf9a103f3dc";
     const GITHUB_TOKEN = "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";
     
@@ -597,131 +586,41 @@
     }
 
     // ======================
-    // Enhanced Google Auth Functions
+    // Login System
     // ======================
-    function handleGoogleLogin(response) {
+    function login() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value.trim();
       const statusEl = document.getElementById('login-status');
-      statusEl.textContent = "Processing login...";
-      statusEl.style.color = "blue";
       
-      try {
-        console.log("Google login response:", response);
-        
-        if (!response.credential) {
-          throw new Error("No credential received from Google");
-        }
-        
-        const base64Url = response.credential.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const userData = JSON.parse(atob(base64));
-        
-        console.log("Decoded user data:", userData);
-        
-        if (!userData.email) {
-          throw new Error("No email found in user data");
-        }
-        
-        // Store user session
-        sessionStorage.setItem('userEmail', userData.email);
-        sessionStorage.setItem('userName', userData.name || userData.email.split('@')[0]);
-        
-        // Immediately update UI
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('app-content').style.display = 'block';
-        
-        // Show admin button if admin
-        if (userData.email === ADMIN_EMAIL) {
-          document.getElementById('adminBtn').style.display = 'inline-block';
-        }
-        
-        // Initialize user data
-        initUserData(userData.email);
-        updateWelcomeMessage();
-        loadSettings();
-        
-        // Force DOM refresh
-        setTimeout(() => {
-          document.body.style.visibility = 'hidden';
-          document.body.offsetHeight; // Trigger reflow
-          document.body.style.visibility = 'visible';
-        }, 50);
-        
-        statusEl.textContent = "Login successful!";
-        statusEl.style.color = "green";
-        
-        // Check for overdue books
-        checkOverdueBooks();
-        
-      } catch (error) {
-        console.error("Login error:", error);
-        statusEl.textContent = "Error: " + error.message;
+      if (!email || !password) {
+        statusEl.textContent = "Please enter both email and password";
         statusEl.style.color = "red";
+        return;
       }
-    }
-
-    function handleAuthClick() {
-      if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
-        google.accounts.id.prompt();
-      } else {
-        document.getElementById('login-status').textContent = "Google auth not loaded yet. Please try again.";
-        document.getElementById('login-status').style.color = "red";
-      }
-    }
-
-    // Test login function for development
-    function testLogin() {
-      const testEmail = document.getElementById('test-email').value.trim() || "testuser@example.com";
-      sessionStorage.setItem('userEmail', testEmail);
-      sessionStorage.setItem('userName', testEmail.split('@')[0]);
       
+      // For demo, any email/password will work
+      statusEl.textContent = "Login successful!";
+      statusEl.style.color = "green";
+      
+      // Store user session
+      sessionStorage.setItem('userEmail', email);
+      sessionStorage.setItem('userName', email.split('@')[0]);
+      
+      // Immediately update UI
       document.getElementById('login-container').style.display = 'none';
       document.getElementById('app-content').style.display = 'block';
       
-      if (testEmail === ADMIN_EMAIL) {
+      // Show admin button if admin
+      if (email === ADMIN_EMAIL) {
         document.getElementById('adminBtn').style.display = 'inline-block';
       }
       
-      initUserData(testEmail);
+      // Initialize user data
+      initUserData(email);
       updateWelcomeMessage();
       loadSettings();
       checkOverdueBooks();
-    }
-
-    function initGoogleAuth() {
-      if (sessionStorage.getItem('userEmail')) {
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('app-content').style.display = 'block';
-        if (sessionStorage.getItem('userEmail') === ADMIN_EMAIL) {
-          document.getElementById('adminBtn').style.display = 'inline-block';
-        }
-        return;
-      }
-
-      // Initialize Google Auth when the script loads
-      if (typeof google !== 'undefined') {
-        google.accounts.id.initialize({
-          client_id: '1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com',
-          callback: handleGoogleLogin
-        });
-        
-        // Render the button
-        google.accounts.id.renderButton(
-          document.getElementById('google-signin-container'),
-          { 
-            type: 'standard',
-            theme: 'filled_blue',
-            size: 'large',
-            text: 'signin_with',
-            shape: 'rectangular',
-            logo_alignment: 'left'
-          }
-        );
-        
-        // Also display the One Tap prompt
-        google.accounts.id.prompt();
-      } else {
-        console.log("Google auth script not loaded yet");
-      }
     }
 
     function initUserData(email) {
@@ -743,7 +642,6 @@
     }
 
     function logout() {
-      // Only clear session data, preserve rental history in localStorage
       sessionStorage.clear();
       location.reload();
     }
@@ -752,9 +650,6 @@
     // Core Application Logic
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
-      // Initialize Google Auth
-      initGoogleAuth();
-      
       // Check for existing session
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
@@ -766,7 +661,7 @@
         updateWelcomeMessage();
         loadSettings();
         checkOverdueBooks();
-        setInterval(checkOverdueBooks, 60000); // Check every minute
+        setInterval(checkOverdueBooks, 60000);
       }
 
       // Initialize scanners
