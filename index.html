@@ -55,22 +55,44 @@
       color: white;
       font-weight: bold;
       cursor: pointer;
+      position: relative;
+      overflow: hidden;
     }
     
     #google-signin-container:hover {
       background: #3367D6;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
     }
     
     #customGoogleBtn {
       display: flex;
       align-items: center;
       padding: 0 10px;
+      z-index: 1;
     }
     
     #customGoogleBtn img {
       width: 20px;
       height: 20px;
       margin-right: 10px;
+      background: white;
+      padding: 5px;
+      border-radius: 50%;
+    }
+    
+    /* Fallback Login */
+    #fallback-login {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 5px;
+    }
+    
+    #fallback-login input {
+      margin: 5px 0;
+      padding: 8px;
+      width: 100%;
+      box-sizing: border-box;
     }
     
     /* Main Menu */
@@ -358,19 +380,24 @@
     <!-- Custom Google Sign-In Button -->
     <div id="google-signin-container" onclick="handleAuthClick()">
       <div id="customGoogleBtn">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg"/>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google logo"/>
         <span>Sign in with Google</span>
       </div>
     </div>
-    <div id="g_id_onload"
-      data-client_id="1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com"
-      data-callback="handleGoogleLogin">
+    
+    <!-- Fallback Login for testing -->
+    <div id="fallback-login">
+      <h3>Test Login (Development Only)</h3>
+      <input type="text" id="test-email" placeholder="Enter test email">
+      <button onclick="testLogin()">Test Login</button>
     </div>
+    
     <div id="login-status"></div>
   </div>
 
   <!-- Main App (hidden until login) -->
   <div id="app-content" style="display:none;">
+    <!-- [Rest of your HTML content remains the same] -->
     <div class="main-menu">
       <h1 id="welcome-title">Library Helper</h1>
       <button id="rentalBtn">Manage Rentals</button>
@@ -633,7 +660,31 @@
     }
 
     function handleAuthClick() {
-      google.accounts.id.prompt();
+      if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+        google.accounts.id.prompt();
+      } else {
+        document.getElementById('login-status').textContent = "Google auth not loaded yet. Please try again.";
+        document.getElementById('login-status').style.color = "red";
+      }
+    }
+
+    // Test login function for development
+    function testLogin() {
+      const testEmail = document.getElementById('test-email').value.trim() || "testuser@example.com";
+      sessionStorage.setItem('userEmail', testEmail);
+      sessionStorage.setItem('userName', testEmail.split('@')[0]);
+      
+      document.getElementById('login-container').style.display = 'none';
+      document.getElementById('app-content').style.display = 'block';
+      
+      if (testEmail === ADMIN_EMAIL) {
+        document.getElementById('adminBtn').style.display = 'inline-block';
+      }
+      
+      initUserData(testEmail);
+      updateWelcomeMessage();
+      loadSettings();
+      checkOverdueBooks();
     }
 
     function initGoogleAuth() {
@@ -646,20 +697,31 @@
         return;
       }
 
-      // Initialize Google Auth
-      google.accounts.id.initialize({
-        client_id: '1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com',
-        callback: handleGoogleLogin
-      });
-      
-      // Render the button
-      google.accounts.id.renderButton(
-        document.getElementById('google-signin-container'),
-        { theme: 'outline', size: 'large' }
-      );
-      
-      // Also display the One Tap prompt
-      google.accounts.id.prompt();
+      // Initialize Google Auth when the script loads
+      if (typeof google !== 'undefined') {
+        google.accounts.id.initialize({
+          client_id: '1060375688140-859gdajq18bdp1q3540ac5b3rcmha82o.apps.googleusercontent.com',
+          callback: handleGoogleLogin
+        });
+        
+        // Render the button
+        google.accounts.id.renderButton(
+          document.getElementById('google-signin-container'),
+          { 
+            type: 'standard',
+            theme: 'filled_blue',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+            logo_alignment: 'left'
+          }
+        );
+        
+        // Also display the One Tap prompt
+        google.accounts.id.prompt();
+      } else {
+        console.log("Google auth script not loaded yet");
+      }
     }
 
     function initUserData(email) {
@@ -691,18 +753,8 @@
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize Google Auth
-      if (typeof google !== 'undefined') {
-        initGoogleAuth();
-      } else {
-        // Fallback if Google script hasn't loaded yet
-        const checkGoogle = setInterval(() => {
-          if (typeof google !== 'undefined') {
-            clearInterval(checkGoogle);
-            initGoogleAuth();
-          }
-        }, 100);
-      }
-
+      initGoogleAuth();
+      
       // Check for existing session
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
