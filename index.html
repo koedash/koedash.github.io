@@ -1131,19 +1131,13 @@
     }
 
     async function renderAllRentals(filter = 'all') {
-      const users = await getAllUsers();
-      const listEl = document.getElementById('globalRentalList');
-      const now = new Date();
+      const adminData = await loadAdminData();
+      const allRentals = [];
       
-      let allRentals = [];
-      users.forEach(user => {
-        user.rentals.forEach(rental => {
-          allRentals.push({
-            ...rental,
-            userEmail: user.email
-          });
-        });
-      });
+      // Get rentals from ALL users
+      for (const userEmail in adminData.rentals) {
+        allRentals.push(...adminData.rentals[userEmail]);
+      }
       
       // Apply filter
       let filtered = [];
@@ -1219,14 +1213,16 @@
       return users;
     }
 
-    async function addOperator(email) {
+   async function addOperator(email) {
       const adminData = await loadAdminData();
       if (!adminData.operators.includes(email)) {
         adminData.operators.push(email);
-        await saveAdminData(adminData);
+        const success = await saveAdminData(adminData); // Save updated data
+        if (!success) throw new Error("Failed to save operator changes");
+        return true;
       }
+      return false;
     }
-
     async function removeOperator(email) {
       const adminData = await loadAdminData();
       adminData.operators = adminData.operators.filter(op => op !== email && op !== ADMIN_EMAIL);
