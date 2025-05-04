@@ -297,7 +297,27 @@
       max-width: 300px;
       animation: slideIn 0.5s ease-out;
     }
+
+    .compact-rental-item {
+      padding: 8px;
+      margin: 4px 0;
+      font-size: 0.9em;
+      line-height: 1.4;
+    }
     
+    .compact-rental-item > div {
+      margin: 2px 0;
+    }
+    
+    .rental-dates {
+      font-size: 0.85em;
+      color: #555;
+    }
+    
+    .overdue {
+      color: #d32f2f;
+      font-weight: bold;
+    }
     /* Filter Options */
     .filter-options span {
       cursor: pointer;
@@ -631,6 +651,28 @@
     // ======================
     // ADMIN FUNCTIONS
     // ======================
+    async function removeAdmin(email) {
+      try {
+        if (email === ADMIN_EMAIL) {
+          alert("Cannot remove primary admin");
+          return false;
+        }
+    
+        const adminData = await loadAdminData();
+        adminData.operators = adminData.operators.filter(op => op !== email);
+        
+        const success = await saveAdminData(adminData);
+        if (success) {
+          await renderUserList();
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error("Error removing admin:", error);
+        return false;
+      }
+    }
+    
     async function addOperator(email) {
       const adminData = await loadAdminData();
       if (!adminData.operators.includes(email)) {
@@ -878,127 +920,160 @@
       try {
         const listEl = document.getElementById('globalRentalList');
         listEl.innerHTML = '<p>Loading rentals...</p>';
-
+    
         const adminData = await loadAdminData();
         const allRentals = [];
-        
+        const now = new Date();
+    
+        // Process all rentals with data validation
         for (const userEmail in adminData.rentals) {
           adminData.rentals[userEmail].forEach(rental => {
-            allRentals.push({
-              ...rental,
-              userEmail
-            });
+            if (rental && rental.bookId && rental.studentId) {
+              allRentals.push({
+                userEmail,
+                bookId: String(rental.bookId),
+                studentId: String(rental.studentId),
+                rentalDate: rental.rentalDate,
+                dueDate: rental.dueDate,
+                returnDate: rental.returnDate
+              });
+            }
           });
         }
-
-        const now = new Date();
-        const filtered = filter === 'all' ? allRentals : 
-          filter === 'active' ? allRentals.filter(r => !r.returnDate) :
-          allRentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
-
+    
+        // Filter rentals
+        const filtered = allRentals.filter(rental => {
+          const rentalDate = new Date(rental.rentalDate);
+          const dueDate = new Date(rental.dueDate);
+          
+          if (filter === 'active') return !rental.returnDate;
+          if (filter === 'overdue') return !rental.returnDate && dueDate < now;
+          return true; // 'all' filter
+        });
+    
+        // Display results
+        listEl.innerHTML = '';
         if (filtered.length === 0) {
           listEl.innerHTML = '<p>No rentals found</p>';
           return;
         }
-
-        listEl.innerHTML = '';
-        filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
-        
-        filtered.forEach(rental => {
-          const rentalDate = new Date(rental.rentalDate);
-          const dueDate = new Date(rental.dueDate);
-          const isOverdue = !rental.returnDate && dueDate < now;
+    
+        filtered.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate))
+          .forEach(rental => {
+            const rentalDate = new Date(rental.rentalDate);
+            const dueDate = new Date(rental.dueDate);
+            const isOverdue = !rental.returnDate && dueDate < now;
+            
+            const rentalEl = document.createElement('div');
+            rentalEl.className = rental.returnDate ? 'returned' : 'active';
+            
+            rentalEl.innerHTML = `
+              <div class="compact-rental-item">
+                <div>
+                  <strong>User:</strong> ${rental.userEmail.split('@')[0]}
+                </div>
+                <div>
+                  <strong>Book:</strong> ${rental.bookId} | 
+                  <strong>Student:</strong> ${rental.studentId}
+                </div>
+                <div class="rental-dates">
+                  <small>Rented: ${rentalDate.toLocaleDateString()}</small> | 
+                  <small ${isOverdue ? 'class="overdue"' : ''}>
+                    Due: ${dueDate.toLocaleDateString()}
+                    ${isOverdue ? ' (OVERDUE)' : ''}
+                  </small>
+                </div>
+              </div>
+            `;
+            
+            listEl.appendChild(rentalEl);
+          });
+    
+      } catch (error) {
+        console.error("Error rendering all rentals:", error);
+        listEl.innerHTML = '<p class="error">Error loading rentals</p>';
+      }
+    }
+    async function renderUserList() {
+      try {
+        const users = await getAllUsers();
+        const userListEl = document.getElementById('userList');
+        userListEl.innerHTML = '';
+    
+        if (users.length === 0) {
+          userListEl.innerHTML = '<p>No users found</p>';
+          return;
+        }
+    
+        users.forEach(user => {
+          const userEl = document.createElement('div');
+          userEl.className = 'user-row';
           
-          const rentalEl = document.createElement('div');
-          rentalEl.className = rental.returnDate ? 'returned' : 'active';
-          
-          rentalEl.innerHTML = `
+          userEl.innerHTML = `
             <div>
-              <strong>User:</strong> ${rental.userEmail.split('@')[0]}<br>
-              <strong>Book:</strong> ${rental.bookId} | 
-              <strong>Student:</strong> ${rental.studentId}<br>
-              <small>Rented: ${rentalDate.toLocaleDateString()}</small> | 
-              <small ${isOverdue ? 'style="color:red"' : ''}>
-                Due: ${dueDate.toLocaleDateString()}
-                ${isOverdue ? ' (OVERDUE)' : ''}
-              </small>
+              ${user.email}
+              ${user.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
+              ${user.isOperator ? '<span class="operator-badge">Operator</span>' : ''}
+            </div>
+            <div>
+              ${user.isAdmin ? `
+                <button class="remove-admin-btn" data-email="${user.email}">
+                  Remove Admin
+                </button>
+              ` : `
+                <button class="make-admin-btn" data-email="${user.email}">
+                  ${user.isOperator ? 'Demote' : 'Make Admin'}
+                </button>
+              `}
+              <button class="delete-user-btn" data-email="${user.email}">
+                Delete
+              </button>
             </div>
           `;
-          
-          listEl.appendChild(rentalEl);
+    
+          userListEl.appendChild(userEl);
         });
-
+    
+        // Add event listeners
+        document.querySelectorAll('.remove-admin-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (confirm(`Remove admin privileges from ${btn.dataset.email}?`)) {
+              await removeAdmin(btn.dataset.email);
+            }
+          });
+        });
+    
+        document.querySelectorAll('.make-admin-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (confirm(`${btn.textContent.trim()} ${btn.dataset.email}?`)) {
+              await addOperator(btn.dataset.email);
+              await renderUserList();
+            }
+          });
+        });
+    
+        document.querySelectorAll('.delete-user-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (confirm(`Delete all data for ${btn.dataset.email}?`)) {
+              const adminData = await loadAdminData();
+              delete adminData.rentals[btn.dataset.email];
+              await saveAdminData(adminData);
+              await renderUserList();
+            }
+          });
+        });
+    
+        // Update stats
+        const stats = await getStats();
+        document.getElementById('totalUsers').textContent = stats.totalUsers;
+        document.getElementById('totalActiveRentals').textContent = stats.activeRentals;
+        document.getElementById('totalOverdueRentals').textContent = stats.overdueRentals;
+    
       } catch (error) {
-        console.error("Failed to render rentals:", error);
-        document.getElementById('globalRentalList').innerHTML = '<p>Error loading rentals</p>';
+        console.error("Error rendering user list:", error);
+        document.getElementById('userList').innerHTML = '<p>Error loading users</p>';
       }
     }
-
-    async function renderUserList() {
-      const users = await getAllUsers();
-      const userListEl = document.getElementById('userList');
-      
-      if (users.length === 0) {
-        userListEl.innerHTML = '<p>No users found</p>';
-        return;
-      }
-      
-      userListEl.innerHTML = '';
-      users.forEach(user => {
-        const userEl = document.createElement('div');
-        userEl.className = 'user-row';
-        
-        userEl.innerHTML = `
-          <div>
-            ${user.email}
-            ${user.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
-            ${!user.isAdmin && user.isOperator ? '<span class="operator-badge">Operator</span>' : ''}
-          </div>
-          <div>
-            ${!user.isAdmin ? `
-              <button class="delete-btn" data-email="${user.email}">Remove</button>
-              ${user.isOperator ? `
-                <button class="operator-btn" data-email="${user.email}">Demote</button>
-              ` : `
-                <button class="operator-btn" data-email="${user.email}">Make Operator</button>
-              `}
-            ` : ''}
-          </div>
-        `;
-        
-        userListEl.appendChild(userEl);
-      });
-      
-      document.querySelectorAll('.operator-btn').forEach(btn => {
-        btn.addEventListener('click', async function() {
-          const email = this.getAttribute('data-email');
-          if (this.textContent.includes('Make')) {
-            await addOperator(email);
-          } else {
-            await removeOperator(email);
-          }
-          await renderUserList();
-        });
-      });
-      
-      document.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async function() {
-          const email = this.getAttribute('data-email');
-          if (confirm(`Remove all data for ${email}?`)) {
-            const adminData = await loadAdminData();
-            delete adminData.rentals[email];
-            await saveAdminData(adminData);
-            await renderUserList();
-          }
-        });
-      });
-      
-      const stats = await getStats();
-      document.getElementById('totalUsers').textContent = stats.totalUsers;
-      document.getElementById('totalActiveRentals').textContent = stats.activeRentals;
-      document.getElementById('totalOverdueRentals').textContent = stats.overdueRentals;
-    }
-
     // ======================
     // SETTINGS FUNCTIONS
     // ======================
