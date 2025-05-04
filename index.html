@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>Library Helper</title>
@@ -515,88 +515,142 @@
     // ======================
     const ADMIN_EMAIL = "koedash121211@gmail.com";
     const WORKER_URL = "https://libsr.koedash121211.workers.dev/";
-    
+
     // ======================
-    // GitHub Data Functions
+    // CORE FUNCTIONS
     // ======================
-        async function loadAdminData() {
-          try {
-            const response = await fetch(WORKER_URL);
-            if (!response.ok) throw new Error(`Worker error: ${response.status}`);
-            return await response.json();
-          } catch (error) {
-            console.error("Failed to load data:", error);
-            return { 
-              operators: [ADMIN_EMAIL], // Fallback data
-              rentals: {} 
-            };
-          }
-        }
-        
-        async function saveAdminData(data) {
-          try {
-            const response = await fetch("https://libsr.koedash121211.workers.dev/", {
-              method: 'PATCH',
-              headers: { 
-                'Content-Type': 'application/json'
-                // Remove 'X-Requested-With' unless explicitly needed
-              },
-              body: JSON.stringify(data)
-            });
-            return response.ok;
-          } catch (error) {
-            console.error("Save failed:", error);
-            return false;
-          }
-        }
+    async function loadAdminData() {
+      try {
+        const response = await fetch(WORKER_URL);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        console.error("Using fallback data:", error);
+        return {
+          operators: [ADMIN_EMAIL],
+          rentals: {}
+        };
+      }
+    }
+
+    async function saveAdminData(data) {
+      try {
+        const response = await fetch(WORKER_URL, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        return response.ok;
+      } catch (error) {
+        console.error("Save failed:", error);
+        return false;
+      }
+    }
+
     // ======================
-    // Google OAuth Functions
+    // RENTAL MANAGEMENT
+    // ======================
+    async function processRental(bookId, studentId) {
+      const userEmail = sessionStorage.getItem('userEmail');
+      if (!userEmail) return false;
+
+      const adminData = await loadAdminData();
+      
+      if (!adminData.rentals[userEmail]) {
+        adminData.rentals[userEmail] = [];
+      }
+
+      const exists = adminData.rentals[userEmail].some(
+        r => r.bookId === bookId && !r.returnDate
+      );
+      if (exists) return false;
+
+      const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+      const period = settings.rentalPeriod || 14;
+      const dueDate = new Date(Date.now() + period * 86400000);
+
+      adminData.rentals[userEmail].push({
+        bookId,
+        studentId,
+        rentalDate: new Date().toISOString(),
+        dueDate: dueDate.toISOString(),
+        returnDate: null
+      });
+
+      return await saveAdminData(adminData);
+    }
+
+    async function deleteRental(bookId) {
+      const userEmail = sessionStorage.getItem('userEmail');
+      if (!userEmail) return false;
+
+      const adminData = await loadAdminData();
+      if (adminData.rentals[userEmail]) {
+        adminData.rentals[userEmail] = adminData.rentals[userEmail].filter(
+          r => r.bookId !== bookId
+        );
+        return await saveAdminData(adminData);
+      }
+      return false;
+    }
+
+    // ======================
+    // ADMIN FUNCTIONS
+    // ======================
+    async function addOperator(email) {
+      const adminData = await loadAdminData();
+      if (!adminData.operators.includes(email)) {
+        adminData.operators.push(email);
+        return await saveAdminData(adminData);
+      }
+      return false;
+    }
+
+    async function getAllUsers() {
+      const adminData = await loadAdminData();
+      return Object.entries(adminData.rentals).map(([email, rentals]) => ({
+        email,
+        isAdmin: adminData.operators.includes(email),
+        rentalCount: rentals.length
+      }));
+    }
+
+    async function getStats() {
+      const adminData = await loadAdminData();
+      const allRentals = Object.values(adminData.rentals).flat();
+      
+      return {
+        totalUsers: Object.keys(adminData.rentals).length,
+        activeRentals: allRentals.filter(r => !r.returnDate).length,
+        overdueRentals: allRentals.filter(r => 
+          !r.returnDate && new Date(r.dueDate) < new Date()
+        ).length
+      };
+    }
+
+    // ======================
+    // GOOGLE AUTH
     // ======================
     function handleCredentialResponse(response) {
       const statusEl = document.getElementById('login-status');
-      statusEl.textContent = "Processing login...";
-      statusEl.style.color = "blue";
-      
       try {
-        console.log("Google login response:", response);
-        
-        if (!response.credential) {
-          throw new Error("No credential received from Google");
-        }
-        
         const base64Url = response.credential.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const userData = JSON.parse(atob(base64));
-        
-        console.log("Decoded user data:", userData);
-        
-        if (!userData.email) {
-          throw new Error("No email found in user data");
-        }
-        
-        // Store user session
+
         sessionStorage.setItem('userEmail', userData.email);
         sessionStorage.setItem('userName', userData.name || userData.email.split('@')[0]);
-        
-        // Immediately update UI
+
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
-        
-        // Show admin button if admin
+
         if (userData.email === ADMIN_EMAIL) {
           document.getElementById('adminBtn').style.display = 'inline-block';
         }
-        
-        // Initialize user data
+
         initUserData(userData.email);
         updateWelcomeMessage();
         loadSettings();
-        
-        statusEl.textContent = "Login successful!";
-        statusEl.style.color = "green";
-        
-        // Check for overdue books
-        checkOverdueBooks();
         
       } catch (error) {
         console.error("Login error:", error);
@@ -605,37 +659,16 @@
       }
     }
 
-    function initUserData(email) {
-      if (!localStorage.getItem(email + '_rentals')) {
-        localStorage.setItem(email + '_rentals', '[]');
-      }
-      if (!localStorage.getItem('appSettings')) {
-        localStorage.setItem('appSettings', JSON.stringify({
-          rentalPeriod: 14
-        }));
-      }
-    }
-
-    function updateWelcomeMessage() {
-      const userName = sessionStorage.getItem('userName');
-      if (userName) {
-        document.getElementById('welcome-title').textContent = `Library Helper (${userName})`;
-      }
-    }
-
     function logout() {
-      // Clear Google session
       google.accounts.id.disableAutoSelect();
-      // Clear our session
       sessionStorage.clear();
       location.reload();
     }
 
     // ======================
-    // Core Application Logic
+    // INITIALIZATION
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
-      // Check for existing session
       if (sessionStorage.getItem('userEmail')) {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
@@ -645,11 +678,9 @@
         initUserData(sessionStorage.getItem('userEmail'));
         updateWelcomeMessage();
         loadSettings();
-        checkOverdueBooks();
-        setInterval(checkOverdueBooks, 60000); // Check every minute
       }
-
-      // Initialize scanners
+      
+      // Setup barcode scanner detection
       const setupScanner = (inputId) => {
         let lastValue = '';
         let lastInputTime = 0;
@@ -762,49 +793,21 @@
       document.querySelectorAll('.modal-window').forEach(m => m.style.display = 'none');
     }
 
-    async function processRental() {
-      const userEmail = sessionStorage.getItem('userEmail');
-      if (!userEmail) return alert("Please login first!");
-    
-      const bookId = document.getElementById('bookId').value.trim();
-      const studentId = document.getElementById('studentId').value.trim();
-    
-      if (bookId && studentId) {
-        // 1. Load current data
-        const adminData = await loadAdminData();
-        
-        // 2. Initialize user's rental array if not exists
-        if (!adminData.rentals[userEmail]) {
-          adminData.rentals[userEmail] = [];
-        }
-    
-        // 3. Check for existing rental
-        const existing = adminData.rentals[userEmail].find(r => 
-          r.bookId === bookId && !r.returnDate
-        );
-        if (existing) return alert(`Book already rented to ${existing.studentId}`);
-    
-        // 4. Add new rental
-        const settings = JSON.parse(localStorage.getItem('appSettings') || { rentalPeriod: 14 });
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + settings.rentalPeriod);
-    
-        adminData.rentals[userEmail].push({
-          bookId,
-          studentId,
-          rentalDate: new Date().toISOString(),
-          dueDate: dueDate.toISOString(),
-          returnDate: null
-        });
-    
-        // 5. Save to server
-        const success = await saveAdminData(adminData);
-        if (!success) throw new Error("Failed to save to server");
-    
-        // 6. Update UI
-        document.getElementById('bookId').value = '';
-        document.getElementById('studentId').value = '';
-        updateRentalList('day');
+    function initUserData(email) {
+      if (!localStorage.getItem(email + '_rentals')) {
+        localStorage.setItem(email + '_rentals', '[]');
+      }
+      if (!localStorage.getItem('appSettings')) {
+        localStorage.setItem('appSettings', JSON.stringify({
+          rentalPeriod: 14
+        }));
+      }
+    }
+
+    function updateWelcomeMessage() {
+      const userName = sessionStorage.getItem('userName');
+      if (userName) {
+        document.getElementById('welcome-title').textContent = `Library Helper (${userName})`;
       }
     }
 
@@ -812,7 +815,8 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+      const adminData = loadAdminData();
+      const rentals = adminData.rentals[userEmail] || [];
       const now = new Date();
       let filtered = [];
       
@@ -890,33 +894,22 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
-      const rental = rentals.find(r => r.bookId === bookId && !r.returnDate);
+      const adminData = loadAdminData();
+      const rental = adminData.rentals[userEmail].find(r => r.bookId === bookId && !r.returnDate);
       
       if (rental) {
         rental.returnDate = new Date().toISOString();
-        rental.status = 'returned';
-        localStorage.setItem(userEmail + '_rentals', JSON.stringify(rentals));
+        saveAdminData(adminData);
         updateRentalList('day');
       }
-    }
-
-    function deleteRental(bookId) {
-      const userEmail = sessionStorage.getItem('userEmail');
-      if (!userEmail) return;
-      
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
-      const updated = rentals.filter(r => r.bookId !== bookId);
-      
-      localStorage.setItem(userEmail + '_rentals', JSON.stringify(updated));
-      updateRentalList('day');
     }
 
     function updateFilterCounts() {
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+      const adminData = loadAdminData();
+      const rentals = adminData.rentals[userEmail] || [];
       const now = new Date();
       
       // Today count
@@ -943,7 +936,8 @@
       const userEmail = sessionStorage.getItem('userEmail');
       if (!userEmail) return;
       
-      const rentals = JSON.parse(localStorage.getItem(userEmail + '_rentals') || '[]');
+      const adminData = loadAdminData();
+      const rentals = adminData.rentals[userEmail] || [];
       const now = new Date();
       const overdue = rentals.filter(r => !r.returnDate && new Date(r.dueDate) < now);
       
@@ -1069,7 +1063,7 @@
     }
 
     // ======================
-    // Admin Panel Functions
+    // ADMIN PANEL FUNCTIONS
     // ======================
     async function renderUserList() {
       const users = await getAllUsers();
@@ -1184,37 +1178,6 @@
       }
     }
 
-    async function getAllUsers() {
-      const adminData = await loadAdminData();
-      const users = [];
-      
-      // Get local users
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.endsWith('_rentals')) {
-          const email = key.replace('_rentals', '');
-          users.push({
-            email,
-            isAdmin: email === ADMIN_EMAIL,
-            isOperator: adminData.operators.includes(email),
-            rentals: JSON.parse(localStorage.getItem(key)) || []
-          });
-        }
-      }
-      
-      return users;
-    }
-
-   async function addOperator(email) {
-      const adminData = await loadAdminData();
-      if (!adminData.operators.includes(email)) {
-        adminData.operators.push(email);
-        const success = await saveAdminData(adminData); // Save updated data
-        if (!success) throw new Error("Failed to save operator changes");
-        return true;
-      }
-      return false;
-    }
     async function removeOperator(email) {
       const adminData = await loadAdminData();
       adminData.operators = adminData.operators.filter(op => op !== email && op !== ADMIN_EMAIL);
