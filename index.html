@@ -536,22 +536,12 @@
     </div>
 
     <!-- ADMIN PANEL -->
-    <div class="admin-actions">
-      <button id="deleteAllRentalsBtn" class="danger-btn">Delete All Rentals</button>
-    </div>
-    
     <div class="modal-window" id="adminPanel">
       <h2>Admin Dashboard</h2>
       <div class="tabs">
         <div class="tab active" data-tab="users">User Management</div>
         <div class="tab" data-tab="allRentals">All Rentals</div>
         <div class="tab" data-tab="stats">Statistics</div>
-        <div class="admin-tools">
-        <h3>Administrative Tools</h3>
-        <button id="deleteAllRentalsBtn" class="danger-btn">Delete All Rentals</button>
-        <p class="warning">This will only delete rental records, not user accounts</p>
-      </div>
-    </div>
       </div>
       
       <div class="tab-content active" id="usersTab">
@@ -591,8 +581,14 @@
           </div>
         </div>
       </div>
+    
+      <!-- Moved admin tools inside admin panel -->
+      <div class="admin-tools">
+        <h3>Administrative Tools</h3>
+        <button id="deleteAllRentalsBtn" class="danger-btn">Delete All Rentals</button>
+        <p class="warning">This will only delete rental records, not user accounts</p>
+      </div>
     </div>
-  </div>
 
   <!-- Google OAuth Script -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -768,7 +764,6 @@
         const base64Url = response.credential.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const userData = JSON.parse(atob(base64));
-        const userData = JSON.parse(atob(base64));
         const userEmail = userData.email;
     
         // Automatically add user to system if new
@@ -776,19 +771,20 @@
         if (!adminData.rentals[userEmail]) {
           adminData.rentals[userEmail] = [];
           await saveAdminData(adminData);
-
-        sessionStorage.setItem('userEmail', userData.email);
-        sessionStorage.setItem('userName', userData.name || userData.email.split('@')[0]);
-
+        }
+    
+        sessionStorage.setItem('userEmail', userEmail);
+        sessionStorage.setItem('userName', userData.name || userEmail.split('@')[0]);
+    
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-content').style.display = 'block';
-
-        const isAdmin = await checkAdminStatus(userData.email);
+    
+        const isAdmin = await checkAdminStatus(userEmail);
         if (isAdmin) {
           document.getElementById('adminBtn').style.display = 'inline-block';
         }
-
-        initUserData(userData.email);
+    
+        initUserData(userEmail);
         updateWelcomeMessage();
         loadSettings();
         
