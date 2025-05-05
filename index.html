@@ -352,6 +352,18 @@
       border-bottom: 1px solid #eee;
     }
     
+    .admin-tools {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .warning {
+      color: #ff6b6b;
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+    
     .admin-badge {
       background: #4CAF50;
       color: white;
@@ -534,6 +546,12 @@
         <div class="tab active" data-tab="users">User Management</div>
         <div class="tab" data-tab="allRentals">All Rentals</div>
         <div class="tab" data-tab="stats">Statistics</div>
+        <div class="admin-tools">
+        <h3>Administrative Tools</h3>
+        <button id="deleteAllRentalsBtn" class="danger-btn">Delete All Rentals</button>
+        <p class="warning">This will only delete rental records, not user accounts</p>
+      </div>
+    </div>
       </div>
       
       <div class="tab-content active" id="usersTab">
@@ -750,6 +768,14 @@
         const base64Url = response.credential.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const userData = JSON.parse(atob(base64));
+        const userData = JSON.parse(atob(base64));
+        const userEmail = userData.email;
+    
+        // Automatically add user to system if new
+        const adminData = await loadAdminData();
+        if (!adminData.rentals[userEmail]) {
+          adminData.rentals[userEmail] = [];
+          await saveAdminData(adminData);
 
         sessionStorage.setItem('userEmail', userData.email);
         sessionStorage.setItem('userName', userData.name || userData.email.split('@')[0]);
@@ -1025,116 +1051,113 @@
       }
     async function renderUserList() {
       try {
-        const users = await getAllUsers();
+        const adminData = await loadAdminData();
         const userListEl = document.getElementById('userList');
-        userListEl.innerHTML = '';
+        userListEl.innerHTML = '<p>Loading users...</p>';
     
-        if (users.length === 0) {
+        // Get all users who have rentals or are operators
+        const allUsers = new Set([
+          ...Object.keys(adminData.rentals),
+          ...adminData.operators
+        ]);
+    
+        if (allUsers.size === 0) {
           userListEl.innerHTML = '<p>No users found</p>';
           return;
         }
     
-        users.forEach(user => {
+        userListEl.innerHTML = '';
+        
+        Array.from(allUsers).forEach(email => {
+          const isAdmin = email === ADMIN_EMAIL;
+          const isOperator = adminData.operators.includes(email);
+          const rentals = adminData.rentals[email] || [];
+          
           const userEl = document.createElement('div');
           userEl.className = 'user-row';
           
           userEl.innerHTML = `
-            <div>
-              ${user.email}
-              ${user.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
-              ${user.isOperator ? '<span class="operator-badge">Operator</span>' : ''}
+            <div class="user-info">
+              <div class="user-email">${email}</div>
+              <div class="user-badges">
+                ${isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
+                ${isOperator ? '<span class="operator-badge">Operator</span>' : ''}
+              </div>
             </div>
-            <div>
-              ${user.isAdmin ? `
-                <button class="remove-admin-btn" data-email="${user.email}">
-                  Remove Admin
+            <div class="user-stats">
+              Rentals: ${rentals.length}
+            </div>
+            <div class="user-actions">
+              ${!isAdmin ? `
+                <button class="toggle-operator-btn" data-email="${email}">
+                  ${isOperator ? 'Demote' : 'Make Operator'}
                 </button>
-              ` : `
-                <button class="make-admin-btn" data-email="${user.email}">
-                  ${user.isOperator ? 'Demote' : 'Make Admin'}
-                </button>
-              `}
-              <button class="delete-user-btn" data-email="${user.email}">
-                Delete
-              </button>
+              ` : ''}
             </div>
           `;
-    
+          
           userListEl.appendChild(userEl);
         });
     
         // Add event listeners
-        document.querySelectorAll('.remove-admin-btn').forEach(btn => {
+        document.querySelectorAll('.toggle-operator-btn').forEach(btn => {
           btn.addEventListener('click', async () => {
-            if (confirm(`Remove admin privileges from ${btn.dataset.email}?`)) {
-              await removeAdmin(btn.dataset.email);
+            const email = btn.dataset.email;
+            if (btn.textContent.includes('Make')) {
+              await addOperator(email);
+            } else {
+              await removeOperator(email);
             }
-          });
-        });
-    
-        document.querySelectorAll('.make-admin-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            if (confirm(`${btn.textContent.trim()} ${btn.dataset.email}?`)) {
-              await addOperator(btn.dataset.email);
-              await renderUserList();
-            }
-          });
-        });
-    
-        document.querySelectorAll('.delete-user-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            if (confirm(`Delete all data for ${btn.dataset.email}?`)) {
-              const adminData = await loadAdminData();
-              delete adminData.rentals[btn.dataset.email];
-              await saveAdminData(adminData);
-              await renderUserList();
-            }
+            await renderUserList();
           });
         });
     
         // Update stats
         const stats = await getStats();
-        document.getElementById('deleteAllRentalsBtn')?.addEventListener('click', deleteAllRentals);
-        document.getElementById('totalUsers').textContent = stats.totalUsers;
+        document.getElementById('totalUsers').textContent = allUsers.size;
         document.getElementById('totalActiveRentals').textContent = stats.activeRentals;
         document.getElementById('totalOverdueRentals').textContent = stats.overdueRentals;
     
       } catch (error) {
         console.error("Error rendering user list:", error);
-        document.getElementById('userList').innerHTML = '<p>Error loading users</p>';
+        document.getElementById('userList').innerHTML = '<p class="error">Error loading users</p>';
       }
     }
     // ======================
     // SETTINGS FUNCTIONS
     // ======================
     async function deleteAllRentals() {
-      if (!confirm("WARNING: This will permanently delete ALL rentals for ALL users. Continue?")) {
-        return false;
+      if (!confirm("WARNING: This will delete ALL rental records but keep user accounts. Continue?")) {
+        return;
       }
     
       try {
         const adminData = await loadAdminData();
-        // Keep operators but clear all rentals
-        adminData.rentals = {}; 
+        
+        // Reset all rentals but keep user structure
+        Object.keys(adminData.rentals).forEach(user => {
+          adminData.rentals[user] = [];
+        });
+    
         const success = await saveAdminData(adminData);
         
         if (success) {
-          alert("All rentals have been deleted");
-          // Refresh all displays
+          alert("All rentals have been cleared");
+          // Refresh displays
           if (sessionStorage.getItem('userEmail')) {
             updateRentalList('day');
+            updateFilterCounts();
           }
           if (document.getElementById('adminPanel').style.display === 'block') {
             renderUserList();
             renderAllRentals();
           }
-          return true;
+        } else {
+          alert("Failed to clear rentals");
         }
-        return false;
       } catch (error) {
-        console.error("Error deleting all rentals:", error);
-        alert("Failed to delete rentals");
-        return false;
+        console.error("Delete all rentals failed:", error);
+        alert("Error clearing rentals");
       }
     }
     
