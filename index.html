@@ -74,13 +74,14 @@
       let toggle = true; // alternate left/right
 
       repos.forEach(repo => {
-        if (repo.has_pages) {
+        // ✅ skip the main site repo (koedash.github.io)
+        if (repo.has_pages && repo.name !== `${username}.github.io`) {
           const wrapper = document.createElement("div");
           wrapper.classList.add("menu-item");
           wrapper.classList.add(toggle ? "left" : "right"); // alternate
 
           const btn = document.createElement("button");
-          btn.textContent = repo.name;
+          btn.textContent = repo.name; // ✅ show only repo name
           btn.onclick = () => window.location.href = `https://${username}.github.io/${repo.name}/`;
 
           wrapper.appendChild(btn);
