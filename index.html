@@ -1,98 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Main Menu</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #121212;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 0;
-      padding: 20px;
-    }
 
-    h1 {
-      margin-bottom: 30px;
-    }
-
-    .menu {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      width: 100%;
-      max-width: 800px;
-    }
-
-    .menu-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .menu-item button {
-      flex: 1;
-      padding: 15px;
-      margin: 0 40px;
-      border: none;
-      border-radius: 12px;
-      background: #1f1f1f;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-      transition: background 0.3s, transform 0.2s;
-    }
-
-    .menu-item button:hover {
-      background: #3a3a3a;
-      transform: scale(1.05);
-    }
-
-    .left {
-      justify-content: flex-start;
-    }
-
-    .right {
-      justify-content: flex-end;
-    }
-  </style>
-</head>
-<body>
-  <h1>My GitHub Pages Sites</h1>
-  <div id="menu" class="menu"></div>
-
-  <script>
-    async function loadSites() {
-      const username = "koedash"; // ✅ your GitHub username
-      const response = await fetch(`https://api.github.com/users/${username}/repos`);
-      const repos = await response.json();
-
-      const menu = document.getElementById("menu");
-      let toggle = true; // alternate left/right
-
-      repos.forEach(repo => {
-        // ✅ skip the main site repo (koedash.github.io)
-        if (repo.has_pages && repo.name !== `${username}.github.io`) {
-          const wrapper = document.createElement("div");
-          wrapper.classList.add("menu-item");
-          wrapper.classList.add(toggle ? "left" : "right"); // alternate
-
-          const btn = document.createElement("button");
-          btn.textContent = repo.name; // ✅ show only repo name
-          btn.onclick = () => window.location.href = `https://${username}.github.io/${repo.name}/`;
-
-          wrapper.appendChild(btn);
-          menu.appendChild(wrapper);
-
-          toggle = !toggle; // flip side
-        }
-      });
-    }
-
-    loadSites();
-  </script>
-</body>
+<html>
+  <head>
+    
+  </head>
+  <body>
+    
+  </body>
 </html>
